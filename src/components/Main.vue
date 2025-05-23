@@ -2,7 +2,7 @@
   <v-app id="main">
     <v-navigation-drawer v-model="drawer">
       <v-list>
-        <v-list-item color="blue" v-for="(note, i) in notes" :key="i" :subtitle="toHHMMSS(note.time)"
+        <v-list-item v-for="(note, i) in notes" :key="i" :subtitle="toHHMMSS(note.time)"
           :title="removeTitle(firstLine(note.text))" link @click="selectAndGotoNote(note)">
 
         </v-list-item>
@@ -73,7 +73,7 @@
       <!-- 控制播放的一堆按钮 -->
       <v-row class="justify-center mt-5">
         <v-btn @click="drawer = !drawer" icon="mdi-pencil"></v-btn>
-        <v-btn @click="AddNote()" icon="mdi-pencil"></v-btn>
+        <v-btn @click="AddDefaultNote()" icon="mdi-pencil"></v-btn>
         <v-btn @click="DeleteCurrentNote()" icon="mdi-delete"></v-btn>
         <v-btn @click="saveNoteJSON()" icon="mdi-download-outline"></v-btn>
         <v-btn @click="debug()">debug</v-btn>
@@ -90,9 +90,9 @@
         </v-col>
       </v-row>
       <!-- 一些 debug 用的信息 -->
-      <v-row class="px-6">
+      <!-- <v-row class="px-6">
         {{ offsetX }} / {{ windowWidth }}
-      </v-row>
+      </v-row> -->
 
     </v-main>
   </v-app>
@@ -196,12 +196,12 @@ const keyD = keys['d']
 const keyF = keys['f']
 
 whenever(logicAnd(keyD, notUsingInput), (v) => {
-  if(!player.value.paused()) return; // 只在视频暂停的时候启用该功能
+  if (!player.value.paused()) return; // 只在视频暂停的时候启用该功能
   Seek(currentTime.value - 0.04) // 随便写个很短的时间假装逐帧调整
 })
 
 whenever(logicAnd(keyF, notUsingInput), (v) => {
-  if(!player.value.paused()) return;
+  if (!player.value.paused()) return;
   Seek(currentTime.value + 0.04)
 })
 
@@ -217,6 +217,89 @@ whenever(logicAnd(keyLeft, notUsingInput), (v) => {
 whenever(logicAnd(keyRight, notUsingInput), (v) => {
   Seek(currentTime.value + 5)
 })
+
+// Ctrl-Z 撤销，Ctrl-Shift-Z 重做
+const keyCtrlZ = keys['ctrl+z']
+const keyShift = keys['shift']
+let commandStack = []
+let commandStackPointer = -1
+
+function registerUndo(note, undoFunc, redoFunc, isDelete = false) {
+  debug_validateCmdSP()
+  commandStack = commandStack.splice(0, commandStackPointer + 1)
+  commandStack.push({
+    undo: undoFunc,
+    redo: redoFunc
+  })
+  commandStackPointer++
+  console.log(commandStack, commandStackPointer)
+}
+
+// 判断栈指针是否正常
+function debug_validateCmdSP() {
+  if (commandStackPointer >= commandStack.length || commandStackPointer < -1) {
+    console.error("invalid history SP")
+  }
+}
+
+whenever(logicAnd(keyCtrlZ, notUsingInput), (v) => {
+  if (keyShift.value) {
+    Redo()
+  } else {
+    Undo()
+  }
+})
+
+function Undo() {
+  debug_validateCmdSP()
+  console.log('Undo')
+  if (commandStackPointer >= 0) {
+    commandStack[commandStackPointer].undo()
+    commandStackPointer--
+  } else {
+    console.log('no undo')
+  }
+  console.log(commandStack, commandStackPointer)
+}
+
+function Redo() {
+  debug_validateCmdSP()
+  console.log('Redo')
+  if(commandStack.length == 0) return;
+  if (commandStackPointer >= commandStack.length - 1) {
+    console.log('no redo')
+    return;
+  }
+  commandStackPointer++
+  commandStack[commandStackPointer].redo()
+  console.log(commandStack, commandStackPointer)
+}
+
+let moveCmd = {
+  undo: () => { },
+  redo: () => { }
+}
+
+function StartRegisterMove(note) {
+  let time = note.time
+  moveCmd = {
+    undo: () => note.time = time,
+    redo: null
+  }
+}
+
+function FinishRegisterMove(note) {
+  let time = note.time
+  moveCmd.redo = () => note.time = time
+  registerCmd(moveCmd)
+}
+
+function registerCmd(cmd) {
+  commandStack = commandStack.splice(0, commandStackPointer + 1)
+  commandStack.push(cmd)
+  commandStackPointer++
+}
+
 
 // Markdown 编辑器工具栏的按钮布局
 const mdEditorToolbar = ['bold',
@@ -306,15 +389,37 @@ function debug() {
   console.log(notes.value)
 }
 
-function AddNote() {
-  let newNote = { time: currentTime.value, text: "# New Note" }
+function AddNote(newNote, regUndo = false) {
   notes.value.push(newNote)
+  if (regUndo) {
+    let noteCopy = { ...newNote }
+    registerCmd(
+      {
+        undo: () => { DeleteNote(newNote) },
+        redo: () => { AddNote(noteCopy); newNote = noteCopy }
+      }
+    )
+  }
   sortNotes()
   selectedNote.value = newNote
 }
 
-function DeleteCurrentNote() {
-  var index = notes.value.indexOf(selectedNote.value);
+function AddDefaultNote() {
+  AddNote({ time: currentTime.value, text: "# New Note" }, true)
+}
+
+function DeleteNote(note, regUndo = false) {
+  var index = notes.value.indexOf(note);
+  if (regUndo) {
+    console.log({ ...note })
+    let noteCopy = { ...note }
+    registerCmd(
+      {
+        undo: () => { AddNote(noteCopy); console.log(noteCopy) },
+        redo: () => { DeleteNote(noteCopy) }
+      }
+    )
+  }
   if (index > -1) {
     notes.value.splice(index, 1);
   }
@@ -330,6 +435,10 @@ function DeleteCurrentNote() {
       }
     }
   }
+}
+
+function DeleteCurrentNote() {
+  DeleteNote(selectedNote.value, true)
 }
 
 function selectAndGotoNote(note) {
@@ -370,6 +479,7 @@ function startDragTimestamp(event, note) {
   draggingTimestamp.value = true
   prevXts = event.clientX
   timestampOffsetX.value = timeToOffset(selectedNote.value.time)
+  StartRegisterMove(note)
 }
 
 function dragTimestamp(event) {
@@ -387,6 +497,7 @@ function endDragTimestamp(event) {
   if (!draggingTimestamp.value) return;
   draggingTimestamp.value = false
   selectedNote.value.time = offsetToTime(timestampOffsetX.value)
+  FinishRegisterMove(selectedNote.value)
   sortNotes()
 }
 
@@ -497,7 +608,7 @@ function saveNoteJSON() {
  * @returns A number in the range [min, max]
  * @type Number
  */
-Number.prototype.clamp = function(min, max) {
+Number.prototype.clamp = function (min, max) {
   return Math.min(Math.max(this, min), max);
 };
 </script>

@@ -9,7 +9,7 @@
       </v-list>
     </v-navigation-drawer>
     <v-main>
-      <!-- 视频和左侧的笔记框 -->
+      <!-- 视频和右侧的笔记框 -->
       <v-row class="px-4 justify-center pt-3">
         <!-- 视频 -->
         <v-col :cols="8">
@@ -365,7 +365,6 @@ const timestampOffsetX = ref(0)
 
 let prevXts = 0
 
-
 function startDragTimestamp(event, note) {
   selectedNote.value = note
   draggingTimestamp.value = true
@@ -426,11 +425,6 @@ function play() {
 function Seek(time) {
   player.value.currentTime(time.clamp(0, videoLength.value));
 }
-
-function nextFrame() {
-
-}
-
 
 const timeScale = ref(100)
 const notes = ref([

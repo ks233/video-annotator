@@ -37,7 +37,7 @@
 
       <!-- 时间轴 -->
       <v-row>
-        <div ref="videoTimeline" class="flex-grow-1 cursor-move" @wheel="onTimelineScroll" color="grey-lighten-2">
+        <div ref="videoTimeline" class="flex-grow-1 cursor-move" @wheel.prevent="onTimelineScroll" color="grey-lighten-2">
           <v-sheet :height="timelineHeight" @mousedown.left="startDragTimeline" color="grey-lighten-3"
             @click.right.prevent.stop :width="Math.max(windowWidth, videoLength * timeScale)">
 
@@ -156,7 +156,7 @@ const tlMarkerInterval = computed(() => 60.0 / tlMarkerBPM.value)
 const tlMarkerBeat = ref(4)
 const tlMarkerOffset = ref(0)
 const tlMarkerCount = computed(() => {
-  return Math.floor(videoLength.value / tlMarkerInterval.value)
+  return Math.ceil(videoLength.value / tlMarkerInterval.value)
 })
 
 const videoFileName = ref('SampleVideo')
@@ -229,9 +229,9 @@ onMounted(() => {
       // durationDisplay: false
     },
     playbackRates: speedList,
-    userActions: {
-      doubleClick: false
-    }
+    // userActions: {
+    //   doubleClick: false
+    // }
   }, () => {
     seek(0)
   })
@@ -811,7 +811,7 @@ function download(content, fileName, contentType) {
 }
 
 function saveNoteJSON() {
-  download(JSON.stringify(notes.value), 'note.txt', 'text/plain');
+  download(JSON.stringify(notes.value), videoFileName.value + '.txt', 'text/plain');
 }
 
 function loadNoteJSON(file) {

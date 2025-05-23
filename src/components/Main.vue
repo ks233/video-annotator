@@ -2,7 +2,7 @@
   <v-app id="main">
     <v-navigation-drawer v-model="drawer">
       <v-list>
-        <v-list-item v-for="(note, i) in notes" :key="i" :subtitle="toHHMMSS(note.time)"
+        <v-list-item v-for="note in notes" :key="note.id" :subtitle="toHHMMSS(note.time)"
           :title="removeTitle(firstLine(note.text))" link @click="selectAndGotoNote(note)">
 
         </v-list-item>
@@ -42,21 +42,20 @@
             @click.right.prevent.stop :width="Math.max(windowWidth, videoLength * timeScale)">
 
             <!-- 表示当前播放时间的线，始终在 timeline 中间 -->
-            <v-divider :thickness="3" class="center-line border-opacity-75" vertical :height="timelineHeight"
-              color="red-lighten-1"
-              :style="{ 'position': 'absolute', 'left': windowWidth / 2 + 'px', 'height': timelineHeight }"></v-divider>
+            <v-divider :thickness="3" class="center-line border-opacity-75" vertical color="red-lighten-1"
+              :style="{ 'position': 'absolute', 'left': windowWidth / 2 + 'px', 'height': timelineHeight + 'px' }"></v-divider>
 
             <!-- 表示视频开头的线 -->
-            <v-divider :thickness="3" class="border-opacity-50" vertical :height="timelineHeight"
-              :style="{ 'position': 'absolute', 'left': - offsetX + 'px', 'height': timelineHeight }"></v-divider>
+            <v-divider :thickness="3" class="border-opacity-50" vertical
+              :style="{ 'position': 'absolute', 'left': - offsetX + 'px', 'height': timelineHeight + 'px' }"></v-divider>
 
             <!-- 表示视频结尾的线 -->
-            <v-divider :thickness="3" class="border-opacity-50" vertical :height="timelineHeight"
-              :style="{ 'position': 'absolute', 'left': videoLength * timeScale - offsetX + 'px', 'height': timelineHeight }"></v-divider>
+            <v-divider :thickness="3" class="border-opacity-50" vertical
+              :style="{ 'position': 'absolute', 'left': videoLength * timeScale - offsetX + 'px', 'height': timelineHeight + 'px' }"></v-divider>
             <!-- 时间戳 -->
-            <div class="d-inline-flex timestamp no-select-text" v-for="note in notes"
-              :style="{ 'position': 'absolute', 'left': note.time * timeScale - offsetX + 'px', 'height': timelineHeight }">
-              <v-divider vertical></v-divider>
+            <div class="d-inline-flex timestamp no-select-text" v-for="note in notes" :key="note.id"
+              :style="{ 'position': 'absolute', 'left': note.time * timeScale - offsetX + 'px', 'height': timelineHeight + 'px' }">
+              <v-divider vertical :thickness="2"></v-divider>
               <v-card :max-width="250" class="mx-3 my-8 d-flex align-center px-3 overflow-x-hidden"
                 color="grey-lighten-1" height="36" @click="selectAndGotoNote(note)" style="float:left"
                 @mousedown.left.stop @mousedown.right.stop="startDragTimestamp($event, note)"
@@ -64,32 +63,75 @@
                 {{ removeTitle(firstLine(note.text)) }}
               </v-card>
             </div>
+            <!-- 刻度 -->
+            <template v-for="i in tlMarkerCount">
+              <template v-if="VisibleOnTimeline((i - 1 + tlMarkerOffset) * tlMarkerInterval)">
+                <!-- 大 -->
+                <v-divider v-if="i % tlMarkerBeat == 1 && parseInt(i / tlMarkerBeat) % tlBigMarkerCull == 0" :thickness="2"
+                  class="border-opacity-25" vertical :style="{
+                    'position': 'absolute', 'left': ((i - 1 + tlMarkerOffset) * tlMarkerInterval * timeScale - offsetX) + 'px',
+                    'height': timelineHeight * tlMarkerRatio + 'px',
+                    transform: `translateY(${timelineHeight * (1 - tlMarkerRatio)}px)`
+                  }"></v-divider>
+                <!-- 小 -->
+                <v-divider v-else-if="tlMarkerDensity < 300" :thickness="1" class="border-opacity-25" vertical :style="{
+                  'position': 'absolute', 'left': ((i - 1 + tlMarkerOffset) * tlMarkerInterval * timeScale - offsetX) + 'px',
+                  'height': timelineHeight * tlMarkerMinorRatio + 'px',
+                  transform: `translateY(${timelineHeight * (1 - tlMarkerMinorRatio)}px)`
+                }"></v-divider>
+              </template>
+            </template>
           </v-sheet>
         </div>
       </v-row>
-      <!-- 控制播放的一堆按钮 -->
-      <v-row class="justify-center mt-5">
-        <v-btn @click="drawer = !drawer" icon="mdi-pencil"></v-btn>
-        <v-btn @click="addDefaultNote()" icon="mdi-pencil"></v-btn>
-        <v-btn @click="deleteCurrentNote()" icon="mdi-delete"></v-btn>
-        <v-btn @click="saveNoteJSON()" icon="mdi-download-outline"></v-btn>
-        <v-btn @click="debug()">debug</v-btn>
-        <v-btn @click="play()" color="blue" icon="mdi-play" size="large"></v-btn>
-      </v-row>
-      <!-- 载入视频文件和笔记文件 -->
-      <v-row>
-        <v-col :cols="2">
-          <v-file-input ref="videoFileInput" label="拖拽加载视频文件..." accept=".mp4,.mov,.webm"
-            @change="updateVideoSrc"></v-file-input>
+      <v-row class="justify-center mt-5" justify="center">
+        <v-col :cols="8">
+          <v-row>
+            <v-col :cols="3">
+            </v-col>
+            <!-- 控制播放的一堆按钮 -->
+            <v-col :cols="6" class="d-flex align-center justify-center">
+              <v-btn @click="drawer = !drawer" class="mx-1" icon="mdi-list-box-outline" size="x-large"></v-btn>
+              <v-divider vertical class="mx-5"></v-divider>
+              <v-btn @click="seekPreviousNote()" class="mx-1" icon="mdi-skip-backward-outline" size="x-large"></v-btn>
+              <v-btn @click="play()" class="mx-1" icon="mdi-play-outline" size="x-large"></v-btn>
+              <v-btn @click="seekNextNote()" class="mx-1" icon="mdi-skip-forward-outline" size="x-large"></v-btn>
+              <v-divider vertical class="mx-5"></v-divider>
+              <v-btn @click="addDefaultNote()" class="mx-1" icon="mdi-plus-outline" size="x-large"></v-btn>
+              <v-btn @click="deleteCurrentNote()" class="mx-1" icon="mdi-delete-outline" size="x-large"></v-btn>
+              <v-divider vertical class="mx-5"></v-divider>
+              <v-btn @click="saveNoteJSON()" class="mx-1" icon="mdi-download-outline" size="x-large"></v-btn>
+            </v-col>
+            <v-col>
+            </v-col>
+          </v-row>
         </v-col>
-        <v-col :cols="2">
-          <v-file-input :height="20" ref="noteFileInput" label="笔记文件" accept=".txt"></v-file-input>
-        </v-col>
+        <!-- BPM 与偏移量调整 -->
+
+        <v-row class="justify-center align-center">
+          <v-col class="mt-5">
+            <v-row class="px-10">
+              <v-number-input class="w-25" v-model="tlMarkerBPM" label="BPM" control-variant="stacked" :min="30"
+                :max="300" :precision="1"></v-number-input>
+              <v-number-input class="w-25" v-model="tlMarkerBeat" label="Beat" control-variant="stacked" :min="1"
+                :max="20"></v-number-input>
+            </v-row>
+            <v-row class="w-100 pl-7 my-0">
+              <v-slider v-model="tlMarkerOffset" :min="0" :max="tlMarkerBeat"></v-slider>
+            </v-row>
+          </v-col>
+          <v-col></v-col>
+        </v-row>
       </v-row>
       <!-- 一些 debug 用的信息 -->
-      <!-- <v-row class="px-6">
-        {{ offsetX }} / {{ windowWidth }}
-      </v-row> -->
+      <v-row class="px-6">
+
+        <v-btn @click="debug()">debug</v-btn>
+        {{ offsetX }} / {{ windowWidth }} / {{ tlMarkerDensity }} / {{ tlBigMarkerDensity }} / {{ tlBigMarkerCull }}<br>
+        timescale: {{ timeScale }} bpmSetting {{ bpmSetting }}<br>
+        timelineMarkerCount: {{ tlMarkerCount }} bpm {{ tlMarkerBPM }} offset {{ tlMarkerOffset }}
+      </v-row>
+
 
     </v-main>
   </v-app>
@@ -102,11 +144,26 @@ import { MdEditor } from 'md-editor-v3';
 import 'md-editor-v3/lib/preview.css';
 import 'md-editor-v3/lib/style.css';
 
-import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
+import { onMounted, ref, computed, watch, onUnmounted } from 'vue'
 
 import { nanoid } from 'nanoid'
 
-const timelineHeight = '100px'
+const timelineHeight = ref(100)
+const tlMarkerRatio = ref(0.15)
+const tlMarkerMinorRatio = ref(0.08)
+const tlMarkerBPM = ref(60)
+const tlMarkerInterval = computed(() => 60.0 / tlMarkerBPM.value)
+const tlMarkerBeat = ref(4)
+const tlMarkerOffset = ref(0)
+const tlMarkerCount = computed(() => {
+  return Math.floor(videoLength.value / tlMarkerInterval.value)
+})
+
+const videoFileName = ref('SampleVideo')
+
+// 0: 节拍器
+// 1: 吸附
+const bpmSetting = ref([])
 
 const videoPlayer = ref(null)
 const player = ref(null)
@@ -118,6 +175,28 @@ const videoLength = ref(100)
 const videoTimeline = ref(null)
 const draggingTimeline = ref(false)
 const draggingTimestamp = ref(false)
+
+// 剔除屏幕外的时间轴刻度、刻度密集时降它们间隔隐藏
+function VisibleOnTimeline(time) {
+  if (timeToOffset(time) < offsetX.value - windowWidth.value * 0.5)
+    return false;
+  if (timeToOffset(time) > offsetX.value + windowWidth.value * 0.5)
+    return false;
+  return true
+}
+
+const tlMarkerDensity = computed(() => {
+  return windowWidth.value / tlMarkerInterval.value / timeScale.value
+})
+
+const tlBigMarkerDensity = computed(()=>{
+  return tlMarkerDensity.value / tlMarkerBeat.value
+})
+
+// 大刻度每 n 个显示一个
+const tlBigMarkerCull = computed(()=>{
+  return Math.ceil(tlBigMarkerDensity.value / 300)
+})
 
 const windowWidth = ref(0)
 
@@ -156,54 +235,83 @@ onMounted(() => {
   }, () => {
     seek(0)
   })
+
   player.value.on('timeupdate', () => {
     updateTime()
   })
 
+  player.value.on('ratechange', () => {
+    // console.log(player.value.playbackRate())
+    currentSpeedIndex.value = speedList.findIndex(n => n == player.value.playbackRate())
+  })
+
   updateWindowSize()
+
   window.addEventListener('resize', updateWindowSize)
 
-  document.addEventListener('dragover', (e) => {
-    e.preventDefault()
-  });
-
-  document.addEventListener('drop', (e) => {
-    videoFileInput.value.files = e.dataTransfer.files;
-    console.log(e.dataTransfer.files)
-    e.preventDefault()
-  });
+  document.addEventListener('dragover', prevent);
+  document.addEventListener('drop', dropFile);
 
   // 避免 markdown 编辑器在不聚焦时响应 Ctrl-Z
-  document.addEventListener('keydown', function (event) {
-    if (event.ctrlKey && event.key === 'z') {
-      if (notUsingInput.value) {
-        event.preventDefault();
-      }
-    }
-  });
-
+  document.addEventListener('keydown', preventCtrlZ);
   // 拖拽时间轴和时间戳，只有 mousedown 不是全局
-
-  document.addEventListener('mousemove', function (event) {
-    if (draggingTimeline.value) {
-      dragTimeline(event)
-      event.preventDefault()
-    }
-    if (draggingTimestamp.value) {
-      dragTimestamp(event)
-      event.preventDefault()
-    }
-  });
-
-  document.addEventListener('mouseup', function (event) {
-    if (draggingTimeline.value) {
-      stopDragTimeline(event)
-    }
-    if (draggingTimestamp.value) {
-      stopDragTimestamp(event)
-    }
-  });
+  document.addEventListener('mousemove', globalMouseMove);
+  document.addEventListener('mouseup', globalMouseUp);
 })
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateWindowSize)
+
+  document.removeEventListener('dragover', prevent);
+  document.removeEventListener('drop', dropFile);
+
+  // 避免 markdown 编辑器在不聚焦时响应 Ctrl-Z
+  document.removeEventListener('keydown', preventCtrlZ);
+  // 拖拽时间轴和时间戳，只有 mousedown 不是全局
+  document.removeEventListener('mousemove', globalMouseMove);
+  document.removeEventListener('mouseup', globalMouseUp);
+})
+
+function globalMouseMove(event) {
+  if (draggingTimeline.value) {
+    dragTimeline(event)
+    event.preventDefault()
+  }
+  if (draggingTimestamp.value) {
+    dragTimestamp(event)
+    event.preventDefault()
+
+  }
+}
+
+function globalMouseUp(event) {
+  if (draggingTimeline.value) {
+    finishDragTimeline(event)
+  }
+  if (draggingTimestamp.value) {
+    finishDragTimestamp(event)
+  }
+}
+
+function preventCtrlZ(event) {
+  if (event.ctrlKey && event.key === 'z') {
+    if (notUsingInput.value) {
+      event.preventDefault();
+    }
+  }
+}
+
+function dropFile(event) {
+  Array.from(event.dataTransfer.files).forEach(file => {
+    loadFile(file)
+  });
+  event.preventDefault()
+}
+
+function prevent(event) {
+  event.preventDefault()
+}
+
 
 // 全局快捷键
 import { useActiveElement, useMagicKeys, whenever } from '@vueuse/core'
@@ -256,7 +364,6 @@ whenever(logicAnd(keyZ, notUsingInput), (v) => {
 })
 
 whenever(logicAnd(keyX, notUsingInput), (v) => {
-  console.log(activeElement.value)
   currentSpeedIndex.value = Math.max(currentSpeedIndex.value - 1, 0)
 })
 
@@ -391,6 +498,10 @@ function setNoteTimeByID(id, time) {
   sortNotes()
 }
 
+function isSelectedNote(note) {
+  return note.id == selectedNote.value.id
+}
+
 // Markdown 编辑器（md-editor-v3）工具栏的按钮布局
 const mdEditorToolbar = ['bold',
   'underline',
@@ -406,28 +517,21 @@ const mdEditorToolbar = ['bold',
   'previewOnly',
 ]
 
-//
-function updateVideoSrc(event) {
-  var URL = window.URL || window.webkitURL
-  var file = videoFileInput.value.files[0]
-  var fileURL = URL.createObjectURL(file)
-  console.log(fileURL)
-  player.value.src({ type: "video/mp4", src: fileURL })
-  seek(0)
-}
-
 function updateWindowSize() {
   windowWidth.value = window.innerWidth
 }
 
+const tsList = [0.2, 0.3, 0.5, 1, 2, 3, 4, 5, 10, 20, 30, 40, 50, 80, 150, 300]
+
 // 滚轮调整时间轴的横向缩放
 function onTimelineScroll(event) {
+
   if (event.deltaY > 0) {
-    timeScale.value -= 10;
+    timeScale.value = tsList.findLast(ts => ts < timeScale.value) ?? tsList[0]
   } else {
-    timeScale.value += 10;
+    timeScale.value = tsList.find(ts => ts > timeScale.value) ?? tsList[tsList.length - 1]
   }
-  timeScale.value = Math.max(timeScale.value, 5)
+  // timeScale.value = timeScale.value.clamp(1, 300)
   offsetX.value = timeToOffset(currentTime.value);
 }
 
@@ -516,7 +620,7 @@ function dragTimeline(event) {
   currentTime.value = offsetToTime(offsetX.value)
 }
 
-function stopDragTimeline(event) {
+function finishDragTimeline(event) {
   if (!draggingTimeline.value) return;
   draggingTimeline.value = false
   seek(offsetToTime(offsetX.value))
@@ -529,13 +633,13 @@ const timestampOffsetX = ref(0)
 
 let prevXts = 0
 
-let draggedNote = null;
+const draggedNote = ref(null);
 
 function startDragTimestamp(event, note) {
-  draggedNote = note
+  draggedNote.value = note
   draggingTimestamp.value = true
   prevXts = event.clientX
-  timestampOffsetX.value = timeToOffset(draggedNote.time)
+  timestampOffsetX.value = timeToOffset(draggedNote.value.time)
   startRegisterMove(note)
 }
 
@@ -547,10 +651,10 @@ function dragTimestamp(event) {
   timestampOffsetX.value -= delta;
   timestampOffsetX.value = Math.max(timestampOffsetX.value, -windowWidth.value / 2);
   timestampOffsetX.value = Math.min(timestampOffsetX.value, timeToOffset(videoLength.value))
-  draggedNote.time = offsetToTime(timestampOffsetX.value)
+  draggedNote.value.time = offsetToTime(timestampOffsetX.value)
 }
 
-function stopDragTimestamp(event) {
+function finishDragTimestamp(event) {
   if (!draggingTimestamp.value) return;
   draggingTimestamp.value = false
   draggedNote.time = offsetToTime(timestampOffsetX.value)
@@ -560,13 +664,35 @@ function stopDragTimestamp(event) {
 }
 
 function setNoteToCurrentTime(note) {
+  startRegisterMove(note)
   note.time = currentTime.value
+  finishRegisterMove(note)
   sortNotes()
 }
 
 function sortNotes() {
   notes.value.sort((a, b) => a.time - b.time)
   console.log('sort')
+}
+
+function seekPreviousNote() {
+  let note = notes.value.findLast(note => note.time < currentTime.value - 0.02)
+  if (note) {
+    seek(note.time)
+  }
+  else {
+    seek(0)
+  }
+}
+
+function seekNextNote() {
+  let note = notes.value.find(note => note.time > currentTime.value + 0.02)
+  if (note) {
+    seek(note.time)
+  }
+  else {
+    seek(videoLength.value)
+  }
 }
 
 function selectNoteByCurrentTime() {
@@ -661,6 +787,21 @@ function toHHMMSS(num) {
   return hours + ':' + minutes + ':' + seconds;
 }
 
+// 【文件的读取和保存】
+
+function loadFile(file) {
+  var URL = window.URL || window.webkitURL
+  var fileURL = URL.createObjectURL(file)
+  if (file.type == "text/plain") {
+    loadNoteJSON(file)
+  } else {
+    console.log(file)
+    videoFileName.value = file.name
+    player.value.src({ type: file.type, src: fileURL })
+    seek(0)
+  }
+}
+
 function download(content, fileName, contentType) {
   var a = document.createElement("a");
   var file = new Blob([content], { type: contentType });
@@ -672,6 +813,18 @@ function download(content, fileName, contentType) {
 function saveNoteJSON() {
   download(JSON.stringify(notes.value), 'note.txt', 'text/plain');
 }
+
+function loadNoteJSON(file) {
+  var reader = new FileReader();
+  reader.onload = event => {
+    var obj = JSON.parse(event.target.result);
+    notes.value = obj
+    seek(0)
+    selectNoteByCurrentTime()
+  };
+  reader.readAsText(file);
+}
+
 
 /**
  * Returns a number whose value is limited to the given range.

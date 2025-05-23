@@ -31,16 +31,15 @@
 
       <!-- 显示当前时间 -->
       <v-row class="justify-center">
-        {{ toHHMMSS(currentTime) }} / {{ toHHMMSS(videoLength) }}
+        {{ toHHMMSS(currentTime) }} / {{ toHHMMSS(videoLength) }} [{{ speedList[currentSpeedIndex] }}x]
       </v-row>
 
 
       <!-- 时间轴 -->
       <v-row>
         <div ref="videoTimeline" class="flex-grow-1 cursor-move" @wheel="onTimelineScroll" color="grey-lighten-2">
-          <v-sheet :height="timelineHeight" @mousedown.left="startDragTimeline" @mouseup="endDragTimeline"
-            @mousemove="dragTimeline" @mouseleave="endDragTimeline" color="grey-lighten-3" @click.right.prevent.stop
-            :width="Math.max(windowWidth, videoLength * timeScale)">
+          <v-sheet :height="timelineHeight" @mousedown.left="startDragTimeline" color="grey-lighten-3"
+            @click.right.prevent.stop :width="Math.max(windowWidth, videoLength * timeScale)">
 
             <!-- 表示当前播放时间的线，始终在 timeline 中间 -->
             <v-divider :thickness="3" class="center-line border-opacity-75" vertical :height="timelineHeight"
@@ -61,9 +60,7 @@
               <v-card :max-width="250" class="mx-3 my-8 d-flex align-center px-3 overflow-x-hidden"
                 color="grey-lighten-1" height="36" @click="selectAndGotoNote(note)" style="float:left"
                 @mousedown.left.stop @mousedown.right.stop="startDragTimestamp($event, note)"
-                @mouseup="endDragTimestamp" @mousemove="dragTimestamp"
-                @click.middle.prevent.stop="setNoteToCurrentTime(note)" @click.right.prevent.stop
-                @mouseleave="endDragTimestamp">
+                @click.middle.prevent.stop="setNoteToCurrentTime(note)" @click.right.prevent.stop>
                 {{ removeTitle(firstLine(note.text)) }}
               </v-card>
             </div>
@@ -73,8 +70,8 @@
       <!-- 控制播放的一堆按钮 -->
       <v-row class="justify-center mt-5">
         <v-btn @click="drawer = !drawer" icon="mdi-pencil"></v-btn>
-        <v-btn @click="AddDefaultNote()" icon="mdi-pencil"></v-btn>
-        <v-btn @click="DeleteCurrentNote()" icon="mdi-delete"></v-btn>
+        <v-btn @click="addDefaultNote()" icon="mdi-pencil"></v-btn>
+        <v-btn @click="deleteCurrentNote()" icon="mdi-delete"></v-btn>
         <v-btn @click="saveNoteJSON()" icon="mdi-download-outline"></v-btn>
         <v-btn @click="debug()">debug</v-btn>
         <v-btn @click="play()" color="blue" icon="mdi-play" size="large"></v-btn>
@@ -107,6 +104,8 @@ import 'md-editor-v3/lib/style.css';
 
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 
+import { nanoid } from 'nanoid'
+
 const timelineHeight = '100px'
 
 const videoPlayer = ref(null)
@@ -132,6 +131,80 @@ const selectedNote = ref({
 }
 )
 
+onMounted(() => {
+  player.value = videojs(videoPlayer.value, {
+    controls: true,
+    sources: [
+      {
+        src: "//vjs.zencdn.net/v/oceans.mp4",
+        type: 'video/mp4',
+      }
+    ],
+    controlBar: {
+      // remainingTimeDisplay: false,
+      // fullscreenToggle: false,
+      pictureInPictureToggle: false,
+      // volumePanel: false,
+      // currentTimeDisplay: false,
+      // timeDivider: false,
+      // durationDisplay: false
+    },
+    playbackRates: speedList,
+    userActions: {
+      doubleClick: false
+    }
+  }, () => {
+    seek(0)
+  })
+  player.value.on('timeupdate', () => {
+    updateTime()
+  })
+
+  updateWindowSize()
+  window.addEventListener('resize', updateWindowSize)
+
+  document.addEventListener('dragover', (e) => {
+    e.preventDefault()
+  });
+
+  document.addEventListener('drop', (e) => {
+    videoFileInput.value.files = e.dataTransfer.files;
+    console.log(e.dataTransfer.files)
+    e.preventDefault()
+  });
+
+  // 避免 markdown 编辑器在不聚焦时响应 Ctrl-Z
+  document.addEventListener('keydown', function (event) {
+    if (event.ctrlKey && event.key === 'z') {
+      if (notUsingInput.value) {
+        event.preventDefault();
+      }
+    }
+  });
+
+  // 拖拽时间轴和时间戳，只有 mousedown 不是全局
+
+  document.addEventListener('mousemove', function (event) {
+    if (draggingTimeline.value) {
+      dragTimeline(event)
+      event.preventDefault()
+    }
+    if (draggingTimestamp.value) {
+      dragTimestamp(event)
+      event.preventDefault()
+    }
+  });
+
+  document.addEventListener('mouseup', function (event) {
+    if (draggingTimeline.value) {
+      stopDragTimeline(event)
+    }
+    if (draggingTimestamp.value) {
+      stopDragTimestamp(event)
+    }
+  });
+})
+
 // 全局快捷键
 import { useActiveElement, useMagicKeys, whenever } from '@vueuse/core'
 import { logicAnd } from '@vueuse/math'
@@ -141,14 +214,14 @@ const activeElement = useActiveElement()
 const notUsingInput = computed(() =>
   activeElement.value?.tagName !== 'INPUT'
   && activeElement.value?.tagName !== 'TEXTAREA'
-  // Markdown 编辑器的输入框有 spellcheck 的属性，其它没有
+  // Markdown 编辑器（md-editor-v3）的输入框有 spellcheck 的属性，其它没有
   // 如果之后其它元素也有 spellcheck，可能导致快捷键失效
   && !activeElement.value?.hasAttribute("spellcheck")
 )
 
 const keys = useMagicKeys()
 
-// 播放速度控制
+// 【播放速度控制】
 
 const speedList = [0.5, 0.75, 1, 1.5, 2, 3]
 const defaultSpeedIndex = 2
@@ -156,12 +229,24 @@ const currentSpeedIndex = ref(2)
 const storedSpeedIndex = ref(4)
 
 // Z X C 变速，和 PotPlayer 类似
+// Ctrl-Z 撤销，Ctrl-Shift-Z 重做
 
 const keyZ = keys['z']
 const keyX = keys['x']
 const keyC = keys['c']
+const keyShift = keys['shift']
+const keyCtrl = keys['ctrl']
 
+// Z, Ctrl-Z, Ctrl-Shift-Z
 whenever(logicAnd(keyZ, notUsingInput), (v) => {
+  if (keyCtrl.value) {
+    if (keyShift.value) {
+      redo();
+    } else {
+      undo()
+    }
+    return;
+  }
   if (currentSpeedIndex.value == defaultSpeedIndex) {
     currentSpeedIndex.value = storedSpeedIndex.value
   } else {
@@ -169,6 +254,7 @@ whenever(logicAnd(keyZ, notUsingInput), (v) => {
     currentSpeedIndex.value = defaultSpeedIndex
   }
 })
+
 whenever(logicAnd(keyX, notUsingInput), (v) => {
   console.log(activeElement.value)
   currentSpeedIndex.value = Math.max(currentSpeedIndex.value - 1, 0)
@@ -197,12 +283,12 @@ const keyF = keys['f']
 
 whenever(logicAnd(keyD, notUsingInput), (v) => {
   if (!player.value.paused()) return; // 只在视频暂停的时候启用该功能
-  Seek(currentTime.value - 0.04) // 随便写个很短的时间假装逐帧调整
+  seek(currentTime.value - 0.04) // 随便写个很短的时间假装逐帧调整
 })
 
 whenever(logicAnd(keyF, notUsingInput), (v) => {
   if (!player.value.paused()) return;
-  Seek(currentTime.value + 0.04)
+  seek(currentTime.value + 0.04)
 })
 
 // 左右控制前进/后退 5s
@@ -211,86 +297,37 @@ const keyLeft = keys['left']
 const keyRight = keys['right']
 
 whenever(logicAnd(keyLeft, notUsingInput), (v) => {
-  Seek(currentTime.value - 5)
+  seek(currentTime.value - 5)
 })
 
 whenever(logicAnd(keyRight, notUsingInput), (v) => {
-  Seek(currentTime.value + 5)
+  seek(currentTime.value + 5)
 })
 
-// Ctrl-Z 撤销，Ctrl-Shift-Z 重做
-const keyCtrlZ = keys['ctrl+z']
-const keyShift = keys['shift']
+// 【撤销与重做】
+
+// 用栈存储指令，元素中都有对应的撤销和重做操作
 let commandStack = []
 let commandStackPointer = -1
-
-function registerUndo(note, undoFunc, redoFunc, isDelete = false) {
-  debug_validateCmdSP()
-  commandStack = commandStack.splice(0, commandStackPointer + 1)
-  commandStack.push({
-    undo: undoFunc,
-    redo: redoFunc
-  })
-  commandStackPointer++
-  console.log(commandStack, commandStackPointer)
-}
-
-// 判断栈指针是否正常
-function debug_validateCmdSP() {
-  if (commandStackPointer >= commandStack.length || commandStackPointer < -1) {
-    console.error("invalid history SP")
-  }
-}
-
-whenever(logicAnd(keyCtrlZ, notUsingInput), (v) => {
-  if (keyShift.value) {
-    Redo()
-  } else {
-    Undo()
-  }
-})
-
-function Undo() {
-  debug_validateCmdSP()
-  console.log('Undo')
-  if (commandStackPointer >= 0) {
-    commandStack[commandStackPointer].undo()
-    commandStackPointer--
-  } else {
-    console.log('no undo')
-  }
-  console.log(commandStack, commandStackPointer)
-}
-
-function Redo() {
-  debug_validateCmdSP()
-  console.log('Redo')
-  if(commandStack.length == 0) return;
-  if (commandStackPointer >= commandStack.length - 1) {
-    console.log('no redo')
-    return;
-  }
-  commandStackPointer++
-  commandStack[commandStackPointer].redo()
-  console.log(commandStack, commandStackPointer)
-}
-
 let moveCmd = {
   undo: () => { },
   redo: () => { }
 }
 
-function StartRegisterMove(note) {
+// 注册指令添加到栈中
+function startRegisterMove(note) {
   let time = note.time
+  let id = note.id
   moveCmd = {
-    undo: () => note.time = time,
+    undo: () => setNoteTimeByID(id, time),
     redo: null
   }
 }
 
-function FinishRegisterMove(note) {
+function finishRegisterMove(note) {
   let time = note.time
-  moveCmd.redo = () => note.time = time
+  let id = note.id
+  moveCmd.redo = () => setNoteTimeByID(id, time)
   registerCmd(moveCmd)
 }
 
@@ -300,8 +337,61 @@ function registerCmd(cmd) {
   commandStackPointer++
 }
 
+// 判断栈指针是否正常
+function debug_validateCmdSP() {
+  if (commandStackPointer >= commandStack.length || commandStackPointer < -1) {
+    console.error("invalid history SP")
+  }
+}
 
-// Markdown 编辑器工具栏的按钮布局
+// 移动栈指针，调用对应的 undo 或 redo
+function undo() {
+  debug_validateCmdSP()
+  // console.log('Undo')
+  if (commandStackPointer >= 0) {
+    commandStack[commandStackPointer].undo()
+    commandStackPointer--
+  } else {
+    // console.log('no undo')
+  }
+  console.log(commandStack, commandStackPointer)
+}
+
+function redo() {
+  debug_validateCmdSP()
+  // console.log('Redo')
+  if (commandStack.length == 0) return;
+  if (commandStackPointer >= commandStack.length - 1) {
+    // console.log('no redo')
+    return;
+  }
+  commandStackPointer++
+  commandStack[commandStackPointer].redo()
+  console.log(commandStack, commandStackPointer)
+}
+
+// 根据 id 找到要操作的元素，避免 add delete 之后丢失引用
+
+function findNoteByID(id) {
+  return notes.value.find(note => note.id == id)
+}
+
+function deleteNoteByID(id) {
+  let note = findNoteByID(id)
+  if (note) {
+    deleteNote(note, false)
+  }
+}
+
+function setNoteTimeByID(id, time) {
+  let note = findNoteByID(id)
+  if (note) {
+    note.time = time
+  }
+  sortNotes()
+}
+
+// Markdown 编辑器（md-editor-v3）工具栏的按钮布局
 const mdEditorToolbar = ['bold',
   'underline',
   'italic',
@@ -312,69 +402,25 @@ const mdEditorToolbar = ['bold',
   'orderedList',
   'task',
   '=',
+  'preview',
   'previewOnly',
-  // 'preview',
 ]
 
-onMounted(() => {
-  player.value = videojs(videoPlayer.value, {
-    controls: true,
-    sources: [
-      {
-        src: "//vjs.zencdn.net/v/oceans.mp4",
-        type: 'video/mp4',
-      }
-    ],
-    controlBar: {
-      // remainingTimeDisplay: false,
-      // fullscreenToggle: false,
-      pictureInPictureToggle: false,
-      // volumePanel: false,
-      // currentTimeDisplay: false,
-      // timeDivider: false,
-      // durationDisplay: false
-    },
-    playbackRates: speedList,
-    userActions: {
-      doubleClick: false
-    }
-  }, () => {
-
-  })
-  player.value.on('load', () => {
-    updateTime()
-  })
-  player.value.on('timeupdate', () => {
-    updateTime()
-  })
-
-  updateWindowSize()
-  window.addEventListener('resize', updateWindowSize)
-
-  document.addEventListener('dragover', (e) => {
-    e.preventDefault()
-  });
-  document.addEventListener('drop', (e) => {
-    videoFileInput.value.files = e.dataTransfer.files;
-    console.log(e.dataTransfer.files)
-    e.preventDefault()
-  });
-
-
-})
-
+//
 function updateVideoSrc(event) {
   var URL = window.URL || window.webkitURL
   var file = videoFileInput.value.files[0]
   var fileURL = URL.createObjectURL(file)
   console.log(fileURL)
   player.value.src({ type: "video/mp4", src: fileURL })
+  seek(0)
 }
 
 function updateWindowSize() {
   windowWidth.value = window.innerWidth
 }
 
+// 滚轮调整时间轴的横向缩放
 function onTimelineScroll(event) {
   if (event.deltaY > 0) {
     timeScale.value -= 10;
@@ -389,34 +435,38 @@ function debug() {
   console.log(notes.value)
 }
 
-function AddNote(newNote, regUndo = false) {
+// 【添加和删除笔记】
+
+function addNote(newNote, regUndo = false) {
   notes.value.push(newNote)
   if (regUndo) {
     let noteCopy = { ...newNote }
+    let id = newNote.id
     registerCmd(
       {
-        undo: () => { DeleteNote(newNote) },
-        redo: () => { AddNote(noteCopy); newNote = noteCopy }
+        undo: () => { deleteNoteByID(id) },
+        redo: () => { addNote(noteCopy) }
       }
     )
   }
   sortNotes()
-  selectedNote.value = newNote
+  selectNoteByCurrentTime()
 }
 
-function AddDefaultNote() {
-  AddNote({ time: currentTime.value, text: "# New Note" }, true)
+function addDefaultNote() {
+  addNote({ id: nanoid(), time: currentTime.value, text: "# New Note" }, true)
 }
 
-function DeleteNote(note, regUndo = false) {
+function deleteNote(note, regUndo = false) {
   var index = notes.value.indexOf(note);
   if (regUndo) {
     console.log({ ...note })
     let noteCopy = { ...note }
+    let id = note.id
     registerCmd(
       {
-        undo: () => { AddNote(noteCopy); console.log(noteCopy) },
-        redo: () => { DeleteNote(noteCopy) }
+        undo: () => { addNote(noteCopy); console.log(noteCopy) },
+        redo: () => { deleteNoteByID(id) }
       }
     )
   }
@@ -437,14 +487,16 @@ function DeleteNote(note, regUndo = false) {
   }
 }
 
-function DeleteCurrentNote() {
-  DeleteNote(selectedNote.value, true)
+function deleteCurrentNote() {
+  deleteNote(selectedNote.value, true)
 }
 
 function selectAndGotoNote(note) {
   selectedNote.value = note
-  Seek(note.time)
+  seek(note.time)
 }
+
+// 拖拽时间轴
 
 let prevX = 0
 
@@ -464,22 +516,27 @@ function dragTimeline(event) {
   currentTime.value = offsetToTime(offsetX.value)
 }
 
-function endDragTimeline(event) {
+function stopDragTimeline(event) {
   if (!draggingTimeline.value) return;
   draggingTimeline.value = false
-  Seek(offsetToTime(offsetX.value))
+  seek(offsetToTime(offsetX.value))
+  selectNoteByCurrentTime()
 }
+
+// 拖拽时间戳
 
 const timestampOffsetX = ref(0)
 
 let prevXts = 0
 
+let draggedNote = null;
+
 function startDragTimestamp(event, note) {
-  selectedNote.value = note
+  draggedNote = note
   draggingTimestamp.value = true
   prevXts = event.clientX
-  timestampOffsetX.value = timeToOffset(selectedNote.value.time)
-  StartRegisterMove(note)
+  timestampOffsetX.value = timeToOffset(draggedNote.time)
+  startRegisterMove(note)
 }
 
 function dragTimestamp(event) {
@@ -490,15 +547,16 @@ function dragTimestamp(event) {
   timestampOffsetX.value -= delta;
   timestampOffsetX.value = Math.max(timestampOffsetX.value, -windowWidth.value / 2);
   timestampOffsetX.value = Math.min(timestampOffsetX.value, timeToOffset(videoLength.value))
-  selectedNote.value.time = offsetToTime(timestampOffsetX.value)
+  draggedNote.time = offsetToTime(timestampOffsetX.value)
 }
 
-function endDragTimestamp(event) {
+function stopDragTimestamp(event) {
   if (!draggingTimestamp.value) return;
   draggingTimestamp.value = false
-  selectedNote.value.time = offsetToTime(timestampOffsetX.value)
-  FinishRegisterMove(selectedNote.value)
+  draggedNote.time = offsetToTime(timestampOffsetX.value)
+  finishRegisterMove(draggedNote)
   sortNotes()
+  selectNoteByCurrentTime()
 }
 
 function setNoteToCurrentTime(note) {
@@ -509,6 +567,17 @@ function setNoteToCurrentTime(note) {
 function sortNotes() {
   notes.value.sort((a, b) => a.time - b.time)
   console.log('sort')
+}
+
+function selectNoteByCurrentTime() {
+  let note = notes.value.findLast(note => note.time < currentTime.value + 0.02)
+  if (note) {
+    selectedNote.value = note;
+  } else {
+    if (notes.value.length > 0) {
+      selectedNote.value = notes.value[0];
+    }
+  }
 }
 
 function offsetToTime(offset) {
@@ -523,6 +592,7 @@ function updateTime() {
   currentTime.value = player.value.currentTime()
   videoLength.value = player.value.duration()
   offsetX.value = timeToOffset(currentTime.value);
+  selectNoteByCurrentTime()
 }
 
 function play() {
@@ -533,29 +603,35 @@ function play() {
   }
 }
 
-function Seek(time) {
+function seek(time) {
   player.value.currentTime(time.clamp(0, videoLength.value));
 }
 
 const timeScale = ref(100)
+
 const notes = ref([
   {
+    "id": '1',
     "time": 0.946316,
     "text": "# 这是一个示例视频\n\n一只鸟"
   },
   {
+    "id": '2',
     "time": 5.456315,
     "text": "# 一群鱼"
   },
   {
+    "id": '3',
     "time": 12.204623,
     "text": "# 一群鸟抓鱼"
   },
   {
+    "id": '4',
     "time": 34.311123,
     "text": "# 鲨鱼"
   },
   {
+    "id": '5',
     "time": 42.747532,
     "text": "# 鲸鱼"
   }

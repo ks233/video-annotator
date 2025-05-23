@@ -2,29 +2,15 @@
   <v-app id="main">
     <v-navigation-drawer v-model="drawer">
       <v-list>
-        <v-list-item color="primary" v-for="note in notes" :subtitle="toHHMMSS(note.time)"
-          :title="removeTitle(firstLine(note.text))" link @click="selectAndGotoNote(note)"></v-list-item>
+        <v-list-item color="blue" v-for="(note, i) in notes" :key="i" :subtitle="toHHMMSS(note.time)"
+          :title="removeTitle(firstLine(note.text))" link @click="selectAndGotoNote(note)">
+
+        </v-list-item>
       </v-list>
     </v-navigation-drawer>
-
-    <v-app-bar>
-      <v-app-bar-nav-icon @click="drawer = !drawer"></v-app-bar-nav-icon>
-
-      <v-app-bar-title>Application
-
-        <v-col :cols="2">
-          <v-file-input ref="videoFileInput" label="拖拽加载视频文件..." accept=".mp4,.mov,.webm"
-            @change="updateVideoSrc"></v-file-input>
-        </v-col>
-        <!-- <v-col :cols="2">
-          <v-file-input label="笔记文件"></v-file-input>
-        </v-col> -->
-      </v-app-bar-title>
-    </v-app-bar>
-
     <v-main>
       <!-- 视频和左侧的笔记框 -->
-      <v-row class="px-4">
+      <v-row class="px-4 justify-center pt-3">
         <!-- 视频 -->
         <v-col :cols="8">
           <v-sheet color="grey-lighten-2" height="70vh">
@@ -52,29 +38,31 @@
       <!-- 时间轴 -->
       <v-row>
         <div ref="videoTimeline" class="flex-grow-1 cursor-move" @wheel="onTimelineScroll" color="grey-lighten-2">
-          <v-sheet height="120px" @mousedown.left="startDragTimeline" @mouseup="endDragTimeline"
-            @mousemove="dragTimeline" @mouseleave="endDragTimeline" color="grey-lighten-3"
+          <v-sheet :height="timelineHeight" @mousedown.left="startDragTimeline" @mouseup="endDragTimeline"
+            @mousemove="dragTimeline" @mouseleave="endDragTimeline" color="grey-lighten-3" @click.right.prevent.stop
             :width="Math.max(windowWidth, videoLength * timeScale)">
 
             <!-- 表示当前播放时间的线，始终在 timeline 中间 -->
-            <v-divider :thickness="3" class="center-line border-opacity-75" vertical :height="120" color="red-lighten-1"
-              :style="{ 'position': 'absolute', 'left': windowWidth / 2 + 'px', 'height': '120px' }"></v-divider>
+            <v-divider :thickness="3" class="center-line border-opacity-75" vertical :height="timelineHeight"
+              color="red-lighten-1"
+              :style="{ 'position': 'absolute', 'left': windowWidth / 2 + 'px', 'height': timelineHeight }"></v-divider>
 
             <!-- 表示视频开头的线 -->
-            <v-divider :thickness="3" class="border-opacity-50" vertical :height="120"
-              :style="{ 'position': 'absolute', 'left': - offsetX + 'px', 'height': '120px' }"></v-divider>
+            <v-divider :thickness="3" class="border-opacity-50" vertical :height="timelineHeight"
+              :style="{ 'position': 'absolute', 'left': - offsetX + 'px', 'height': timelineHeight }"></v-divider>
 
             <!-- 表示视频结尾的线 -->
-            <v-divider :thickness="3" class="border-opacity-50" vertical :height="120"
-              :style="{ 'position': 'absolute', 'left': videoLength * timeScale - offsetX + 'px', 'height': '120px' }"></v-divider>
+            <v-divider :thickness="3" class="border-opacity-50" vertical :height="timelineHeight"
+              :style="{ 'position': 'absolute', 'left': videoLength * timeScale - offsetX + 'px', 'height': timelineHeight }"></v-divider>
             <!-- 时间戳 -->
             <div class="d-inline-flex timestamp no-select-text" v-for="note in notes"
-              :style="{ 'position': 'absolute', 'left': note.time * timeScale - offsetX + 'px', 'height': '120px' }">
+              :style="{ 'position': 'absolute', 'left': note.time * timeScale - offsetX + 'px', 'height': timelineHeight }">
               <v-divider vertical></v-divider>
-              <v-card :max-width="250" class="mx-3 my-11 d-flex align-center px-3 overflow-x-hidden"
-                color="grey-lighten-1" height="36" @click="selectAndGotoNote(note)" style="float:left" @mousedown.left.stop
-                @mousedown.middle.stop="startDragTimestamp($event, note)" @mouseup.stop="endDragTimestamp"
-                @mousemove.stop="dragTimestamp" @click.right.prevent.stop="setNoteToCurrentTime(note)"
+              <v-card :max-width="250" class="mx-3 my-8 d-flex align-center px-3 overflow-x-hidden"
+                color="grey-lighten-1" height="36" @click="selectAndGotoNote(note)" style="float:left"
+                @mousedown.left.stop @mousedown.right.stop="startDragTimestamp($event, note)"
+                @mouseup="endDragTimestamp" @mousemove="dragTimestamp"
+                @click.middle.prevent.stop="setNoteToCurrentTime(note)" @click.right.prevent.stop
                 @mouseleave="endDragTimestamp">
                 {{ removeTitle(firstLine(note.text)) }}
               </v-card>
@@ -83,15 +71,23 @@
         </div>
       </v-row>
       <!-- 控制播放的一堆按钮 -->
-      <v-row class="justify-center">
+      <v-row class="justify-center mt-5">
+        <v-btn @click="drawer = !drawer" icon="mdi-pencil"></v-btn>
+        <v-btn @click="AddNote()" icon="mdi-pencil"></v-btn>
+        <v-btn @click="DeleteCurrentNote()" icon="mdi-delete"></v-btn>
+        <v-btn @click="saveNoteJSON()" icon="mdi-download-outline"></v-btn>
         <v-btn @click="debug()">debug</v-btn>
-        <v-btn @click="AddNote()">Add Note</v-btn>
-        <v-btn @click="DeleteCurrentNote()">Delete Current Note</v-btn>
-        <v-btn @click="play()">play</v-btn>
+        <v-btn @click="play()" color="blue" icon="mdi-play" size="large"></v-btn>
       </v-row>
       <!-- 载入视频文件和笔记文件 -->
       <v-row>
-
+        <v-col :cols="2">
+          <v-file-input ref="videoFileInput" label="拖拽加载视频文件..." accept=".mp4,.mov,.webm"
+            @change="updateVideoSrc"></v-file-input>
+        </v-col>
+        <v-col :cols="2">
+          <v-file-input :height="20" ref="noteFileInput" label="笔记文件" accept=".txt"></v-file-input>
+        </v-col>
       </v-row>
       <!-- 一些 debug 用的信息 -->
       <v-row class="px-6">
@@ -109,13 +105,13 @@ import { MdEditor } from 'md-editor-v3';
 import 'md-editor-v3/lib/preview.css';
 import 'md-editor-v3/lib/style.css';
 
-import { onMounted, onUnmounted, ref, computed } from 'vue'
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 
-const id = 'preview-only';
-const scrollElement = document.documentElement;
+const timelineHeight = '100px'
+
 const videoPlayer = ref(null)
-const myPlayer = ref(null)
-const drawer = ref(null)
+const player = ref(null)
+const drawer = ref(true)
 
 const currentTime = ref(0)
 const videoLength = ref(100)
@@ -130,16 +126,99 @@ const offsetX = ref(0)
 
 const videoFileInput = ref(null)
 
-const mdText = ref('# hello')
-
 const selectedNote = ref({
   time: 0,
   text: ""
 }
 )
 
+// 全局快捷键
+import { useActiveElement, useMagicKeys, whenever } from '@vueuse/core'
+import { logicAnd } from '@vueuse/math'
 
+// 编辑文本框时不触发全局快捷键
+const activeElement = useActiveElement()
+const notUsingInput = computed(() =>
+  activeElement.value?.tagName !== 'INPUT'
+  && activeElement.value?.tagName !== 'TEXTAREA'
+  // Markdown 编辑器的输入框有 spellcheck 的属性，其它没有
+  // 如果之后其它元素也有 spellcheck，可能导致快捷键失效
+  && !activeElement.value?.hasAttribute("spellcheck")
+)
 
+const keys = useMagicKeys()
+
+// 播放速度控制
+
+const speedList = [0.5, 0.75, 1, 1.5, 2, 3]
+const defaultSpeedIndex = 2
+const currentSpeedIndex = ref(2)
+const storedSpeedIndex = ref(4)
+
+// Z X C 变速，和 PotPlayer 类似
+
+const keyZ = keys['z']
+const keyX = keys['x']
+const keyC = keys['c']
+
+whenever(logicAnd(keyZ, notUsingInput), (v) => {
+  if (currentSpeedIndex.value == defaultSpeedIndex) {
+    currentSpeedIndex.value = storedSpeedIndex.value
+  } else {
+    storedSpeedIndex.value = currentSpeedIndex.value
+    currentSpeedIndex.value = defaultSpeedIndex
+  }
+})
+whenever(logicAnd(keyX, notUsingInput), (v) => {
+  console.log(activeElement.value)
+  currentSpeedIndex.value = Math.max(currentSpeedIndex.value - 1, 0)
+})
+
+whenever(logicAnd(keyC, notUsingInput), (v) => {
+  currentSpeedIndex.value = Math.min(currentSpeedIndex.value + 1, speedList.length - 1)
+})
+
+// 更新播放速度
+watch(currentSpeedIndex, (v) => {
+  player.value.playbackRate(speedList[v]);
+})
+
+// Space 控制播放和暂停
+const keySpace = keys['space']
+
+whenever(logicAnd(keySpace, notUsingInput), (v) => {
+  play()
+})
+
+// D F 控制上一帧下一帧
+
+const keyD = keys['d']
+const keyF = keys['f']
+
+whenever(logicAnd(keyD, notUsingInput), (v) => {
+  if(!player.value.paused()) return; // 只在视频暂停的时候启用该功能
+  Seek(currentTime.value - 0.04) // 随便写个很短的时间假装逐帧调整
+})
+
+whenever(logicAnd(keyF, notUsingInput), (v) => {
+  if(!player.value.paused()) return;
+  Seek(currentTime.value + 0.04)
+})
+
+// 左右控制前进/后退 5s
+
+const keyLeft = keys['left']
+const keyRight = keys['right']
+
+whenever(logicAnd(keyLeft, notUsingInput), (v) => {
+  Seek(currentTime.value - 5)
+})
+
+whenever(logicAnd(keyRight, notUsingInput), (v) => {
+  Seek(currentTime.value + 5)
+})
+
+// Markdown 编辑器工具栏的按钮布局
 const mdEditorToolbar = ['bold',
   'underline',
   'italic',
@@ -155,7 +234,7 @@ const mdEditorToolbar = ['bold',
 ]
 
 onMounted(() => {
-  myPlayer.value = videojs(videoPlayer.value, {
+  player.value = videojs(videoPlayer.value, {
     controls: true,
     sources: [
       {
@@ -172,34 +251,41 @@ onMounted(() => {
       // timeDivider: false,
       // durationDisplay: false
     },
-    playbackRates: [0.25, 0.5, 1, 1.5, 2, 3],
+    playbackRates: speedList,
     userActions: {
       doubleClick: false
     }
   }, () => {
 
   })
-  myPlayer.value.on('load', () => {
+  player.value.on('load', () => {
     updateTime()
   })
-  myPlayer.value.on('timeupdate', () => {
+  player.value.on('timeupdate', () => {
     updateTime()
   })
 
   updateWindowSize()
   window.addEventListener('resize', updateWindowSize)
 
-  // document.addEventListener('keyup', globalHotkey);
+  document.addEventListener('dragover', (e) => {
+    e.preventDefault()
+  });
+  document.addEventListener('drop', (e) => {
+    videoFileInput.value.files = e.dataTransfer.files;
+    console.log(e.dataTransfer.files)
+    e.preventDefault()
+  });
+
 
 })
-let speed = 1;
 
 function updateVideoSrc(event) {
   var URL = window.URL || window.webkitURL
   var file = videoFileInput.value.files[0]
   var fileURL = URL.createObjectURL(file)
   console.log(fileURL)
-  myPlayer.value.src({ type: "video/mp4", src: fileURL })
+  player.value.src({ type: "video/mp4", src: fileURL })
 }
 
 function updateWindowSize() {
@@ -246,22 +332,9 @@ function DeleteCurrentNote() {
   }
 }
 
-
-function globalHotkey(event) {
-  // z
-  if (event.keyCode === 90) {
-    changeSpeed()
-  }
-  // space
-  if (event.keyCode === 32) {
-    play()
-  }
-}
-
 function selectAndGotoNote(note) {
-  if (timestampMoved) return;
   selectedNote.value = note
-  setCurrentTime(note.time)
+  Seek(note.time)
 }
 
 let prevX = 0
@@ -285,26 +358,23 @@ function dragTimeline(event) {
 function endDragTimeline(event) {
   if (!draggingTimeline.value) return;
   draggingTimeline.value = false
-  setCurrentTime(offsetToTime(offsetX.value))
+  Seek(offsetToTime(offsetX.value))
 }
 
 const timestampOffsetX = ref(0)
 
 let prevXts = 0
 
-let timestampMoved = false;
 
 function startDragTimestamp(event, note) {
   selectedNote.value = note
   draggingTimestamp.value = true
-  timestampMoved = false;
   prevXts = event.clientX
   timestampOffsetX.value = timeToOffset(selectedNote.value.time)
 }
 
 function dragTimestamp(event) {
   if (!draggingTimestamp.value) return;
-  timestampMoved = true;
   let delta = prevXts - event.clientX;
   prevXts = event.clientX
   // videoTimeline.value.scrollLeft += delta;
@@ -340,29 +410,22 @@ function timeToOffset(time) {
 
 function updateTime() {
   if (draggingTimeline.value) return;
-  currentTime.value = myPlayer.value.currentTime()
-  videoLength.value = myPlayer.value.duration()
+  currentTime.value = player.value.currentTime()
+  videoLength.value = player.value.duration()
   offsetX.value = timeToOffset(currentTime.value);
 }
 
-
-function changeSpeed() {
-  speed = speed === 1 ? 2 : 1;
-  myPlayer.value.playbackRate(speed);
-}
-
 function play() {
-  if (myPlayer.value.paused()) {
-    myPlayer.value.play();
+  if (player.value.paused()) {
+    player.value.play();
   } else {
-    myPlayer.value.pause();
+    player.value.pause();
   }
 }
 
-function setCurrentTime(time) {
-  myPlayer.value.currentTime(time);
+function Seek(time) {
+  player.value.currentTime(time.clamp(0, videoLength.value));
 }
-
 
 function nextFrame() {
 
@@ -416,6 +479,33 @@ function toHHMMSS(num) {
   if (seconds < 10) { seconds = "0" + seconds; }
   return hours + ':' + minutes + ':' + seconds;
 }
+
+function download(content, fileName, contentType) {
+  var a = document.createElement("a");
+  var file = new Blob([content], { type: contentType });
+  a.href = URL.createObjectURL(file);
+  a.download = fileName;
+  a.click();
+}
+
+function saveNoteJSON() {
+  download(JSON.stringify(notes.value), 'note.txt', 'text/plain');
+}
+
+/**
+ * Returns a number whose value is limited to the given range.
+ *
+ * Example: limit the output of this computation to between 0 and 255
+ * (x * 255).clamp(0, 255)
+ *
+ * @param {Number} min The lower boundary of the output range
+ * @param {Number} max The upper boundary of the output range
+ * @returns A number in the range [min, max]
+ * @type Number
+ */
+Number.prototype.clamp = function(min, max) {
+  return Math.min(Math.max(this, min), max);
+};
 </script>
 
 <style scoped>

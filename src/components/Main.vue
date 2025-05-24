@@ -13,7 +13,7 @@
       <v-row class="px-4 justify-center pt-3">
         <!-- 视频 -->
         <v-col :cols="8">
-          <v-sheet color="grey-lighten-2" height="70vh">
+          <v-sheet height="70vh" :elevation="8">
             <video ref="videoPlayer" id="my-player" class="video-js" controls preload="auto">
             </video>
           </v-sheet>
@@ -56,7 +56,7 @@
         <div ref="videoTimeline" class="flex-grow-1 cursor-move" @wheel.prevent="onTimelineScroll"
           color="grey-lighten-2">
           <v-sheet :height="timelineHeight" @mousedown.left="startDragTimeline" color="grey-lighten-3"
-            @click.right.prevent.stop :width="Math.max(windowWidth, videoLength * timeScale)">
+            @click.right.prevent.stop :width="Math.max(windowWidth, videoLength * timeScale)" >
 
             <!-- 表示当前播放时间的线，始终在 timeline 中间 -->
             <v-divider :thickness="3" class="center-line border-opacity-75" vertical color="red-lighten-1"
@@ -107,19 +107,22 @@
           <v-row>
             <v-col :cols="3">
             </v-col>
-            <!-- 控制播放的一堆按钮 -->
+            <!-- 一堆按钮 -->
             <v-col :cols="6" class="d-flex align-center justify-center">
-              <v-btn @click="drawer = !drawer" class="mx-1" icon="mdi-list-box-outline" size="x-large"></v-btn>
-              <v-btn @click="drawer = !drawer" class="mx-1" icon="mdi-list-box-outline" size="x-large"></v-btn>
+              <!-- 用 mousedown.prevent 阻止按钮在点击后获取焦点，否则按下空格时聚焦的按钮也会被触发 -->
+              <v-btn @mousedown.prevent @click="drawer = !drawer" class="mx-1" icon="mdi-list-box-outline" size="x-large"></v-btn>
+              <v-btn @mousedown.prevent @click="showVideo = !showVideo" class="mx-1"
+                :icon="showVideo ? 'mdi-television-off' : 'mdi-television'" size="x-large"></v-btn>
               <v-divider vertical class="mx-5"></v-divider>
-              <v-btn @click="seekPreviousNote()" class="mx-1" icon="mdi-skip-backward-outline" size="x-large"></v-btn>
-              <v-btn @click="play()" class="mx-1" icon="mdi-play-outline" size="x-large"></v-btn>
-              <v-btn @click="seekNextNote()" class="mx-1" icon="mdi-skip-forward-outline" size="x-large"></v-btn>
+              <v-btn @mousedown.prevent @click="seekPreviousNote()" class="mx-1" icon="mdi-skip-backward-outline" size="x-large"></v-btn>
+              <v-btn @mousedown.prevent @click="play()" class="mx-1" :icon="isPlaying ? 'mdi-pause' : 'mdi-play-outline'"
+                size="x-large"></v-btn>
+              <v-btn @mousedown.prevent @click="seekNextNote()" class="mx-1" icon="mdi-skip-forward-outline" size="x-large"></v-btn>
               <v-divider vertical class="mx-5"></v-divider>
-              <v-btn @click="addDefaultNote()" class="mx-1" icon="mdi-text-box-plus-outline" size="x-large"></v-btn>
-              <v-btn @click="deleteCurrentNote()" class="mx-1" icon="mdi-delete-outline" size="x-large"></v-btn>
+              <v-btn @mousedown.prevent @click="addDefaultNote()" class="mx-1" icon="mdi-text-box-plus-outline" size="x-large"></v-btn>
+              <v-btn @mousedown.prevent @click="deleteCurrentNote()" class="mx-1" icon="mdi-delete-outline" size="x-large"></v-btn>
               <v-divider vertical class="mx-5"></v-divider>
-              <v-btn @click="saveNoteJSON()" class="mx-1" icon="mdi-content-save-outline" size="x-large"></v-btn>
+              <v-btn @mousedown.prevent @click="saveNoteJSON()" class="mx-1" icon="mdi-content-save-outline" size="x-large"></v-btn>
             </v-col>
             <v-col>
             </v-col>
@@ -227,12 +230,20 @@ const windowWidth = ref(0)
 // 刻度根据视频时间整体偏移
 const offsetX = ref(0)
 
+// 在 video 的 play 和 pause 事件中更新该值，仅用于显示播放器按钮的图标
+const isPlaying = ref(false)
+
 const selectedNote = ref({
   id: "default",
   time: 0,
   text: ""
 }
 )
+
+const showVideo = ref(true)
+watch(showVideo, (v) => {
+  document.getElementById('my-player').style.setProperty('display', v ? "inline-block" : "none")
+})
 
 onMounted(() => {
   player.value = videojs(videoPlayer.value, {
@@ -264,6 +275,12 @@ onMounted(() => {
     updateTime()
   })
 
+  player.value.on('pause', () => {
+    isPlaying.value = false
+  })
+  player.value.on('play', () => {
+    isPlaying.value = true
+  })
   player.value.on('ratechange', () => {
     currentSpeedIndex.value = speedList.findIndex(n => n == player.value.playbackRate())
   })
@@ -610,6 +627,7 @@ function addDefaultNote() {
 }
 
 function deleteNote(note, regUndo = false) {
+  if(notes.value.length == 0) return;
   var index = notes.value.indexOf(note);
   if (regUndo) {
     let noteCopy = note.clone()
@@ -978,4 +996,5 @@ function loadSaveData(saveData) {
   padding: 0;
   margin-top: -6px;
 }
+
 </style>

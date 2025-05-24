@@ -12,17 +12,18 @@
       <!-- 视频和右侧的笔记框 -->
       <v-row class="px-4 justify-center pt-3">
         <!-- 视频 -->
-        <v-col :cols="8">
+        <v-col>
           <v-sheet class="d-flex" height="70vh" :elevation="2">
             <video ref="videoPlayer" id="my-player" class="video-js"></video>
-            <div id="md-content" class="pa-10" v-if="!showVideo" v-html="mdContent"></div>
+            <div class="md-display pa-10" v-if="!showVideo" v-html="mdContent"></div>
           </v-sheet>
         </v-col>
         <!-- Markdown 笔记框 -->
-        <v-col :cols="4" height="70vh">
-          <v-sheet height="70vh" class="d-flex" color="grey-lighten-2">
-            <MdEditor id="md-editor" v-model="selectedNote.text" class="h-100" :toolbars="mdEditorToolbar"
-              :preview="false" :theme="theme.global.name.value" />
+        <v-col v-show="(!(!editMode && !showVideo))" :cols="4" height="70vh">
+          <v-sheet height="70vh" class="d-flex">
+            <MdEditor ref="myMdEditor" v-show="editMode" id="md-editor" v-model="selectedNote.text" class="h-100"
+              :toolbars="mdEditorToolbar" :preview="false" :theme="theme.global.name.value" />
+            <div class="md-display pa-10" v-if="!editMode" v-html="mdContent"></div>
           </v-sheet>
         </v-col>
       </v-row>
@@ -113,8 +114,8 @@
                 size="x-large"></v-btn>
               <v-btn @mousedown.prevent @click="showVideo = !showVideo" class="mx-1"
                 :icon="showVideo ? 'mdi-television-off' : 'mdi-television'" size="x-large"></v-btn>
-              <v-btn @mousedown.prevent @click="toggleTheme()" class="mx-1" icon="mdi-brightness-6"
-                size="x-large"></v-btn>
+              <v-btn @mousedown.prevent @click="editMode = !editMode" class="mx-1"
+                :icon="editMode ? 'mdi-eye-outline' : 'mdi-pen'" size="x-large"></v-btn>
               <v-divider vertical class="mx-5"></v-divider>
               <v-btn @mousedown.prevent @click="seekPreviousNote()" class="mx-1" icon="mdi-skip-backward-outline"
                 size="x-large"></v-btn>
@@ -126,6 +127,8 @@
               <v-btn @mousedown.prevent @click="addDefaultNote()" class="mx-1" icon="mdi-text-box-plus-outline"
                 size="x-large"></v-btn>
               <v-btn @mousedown.prevent @click="deleteCurrentNote()" class="mx-1" icon="mdi-delete-outline"
+                size="x-large"></v-btn>
+              <v-btn @mousedown.prevent @click="drawer = !drawer" class="mx-1" icon="mdi-image-multiple-outline"
                 size="x-large"></v-btn>
               <v-divider vertical class="mx-5"></v-divider>
               <v-btn @mousedown.prevent @click="saveNoteJSON()" class="mx-1" icon="mdi-content-save-outline"
@@ -170,6 +173,8 @@
 
       </v-row>
 
+      <v-btn @mousedown.prevent @click="toggleTheme()" id="toggle-theme" class="mx-1" prepend-icon="mdi-brightness-6"
+        size="small">{{ theme.global.name.value }} Mode</v-btn>
 
     </v-main>
   </v-app>
@@ -184,7 +189,7 @@ import { MdEditor } from 'md-editor-v3';
 import 'md-editor-v3/lib/preview.css';
 import 'md-editor-v3/lib/style.css';
 
-import { onMounted, ref, computed, watch, onUnmounted } from 'vue'
+import { onMounted, ref, computed, watch, onUnmounted, nextTick } from 'vue'
 
 import { nanoid } from 'nanoid'
 
@@ -248,7 +253,7 @@ const tlMarkerCount = computed(() => {
   return Math.ceil(videoLength.value / tlMarkerInterval.value)
 })
 
-// 剔除屏幕外的时间轴刻度、刻度密集时降它们间隔隐藏
+// 剔除屏幕外的时间轴刻度、刻度密集时将它们间隔隐藏
 function VisibleOnTimeline(time) {
   if (timeToOffset(time) < offsetX.value - windowWidth.value * 0.5)
     return false;
@@ -313,9 +318,8 @@ onMounted(() => {
       ytControls: 2,
       iv_load_policy: 3
     }
-  }, () => {
-    seek(0)
   })
+
 
   player.value.on('timeupdate', () => {
     updateTime()
@@ -377,6 +381,7 @@ onMounted(() => {
     // Default (when Media-Queries are not supported)
   }
 
+  offsetX.value = timeToOffset(currentTime.value)
 })
 
 onUnmounted(() => {
@@ -427,6 +432,9 @@ function preventHotkeys(event) {
     if (notUsingInput.value) {
       event.preventDefault();
     }
+  }
+  if (event.ctrlKey && event.key === 'e') {
+    event.preventDefault();
   }
 }
 
@@ -696,10 +704,24 @@ const mdEditorToolbar = ['bold',
   'unorderedList',
   'orderedList',
   'task',
-  '=',
-  'preview',
-  'previewOnly',
+  // '=',
+  // 'preview',
+  // 'previewOnly',
 ]
+
+const editMode = ref(true)
+
+const keyCtrlE = keys['ctrl+e']
+const myMdEditor = ref(null)
+whenever(keyCtrlE, (v) => {
+  editMode.value = !editMode.value
+  nextTick(() => {
+    if (editMode.value == true) {
+      myMdEditor.value.focus()
+    }
+  })
+})
+
 
 function updateWindowSize() {
   windowWidth.value = window.innerWidth
@@ -707,8 +729,6 @@ function updateWindowSize() {
 
 function debug() {
   console.log(notes.value)
-  var audio = new Audio('metronome_down.wav');
-  audio.play();
   addImage('test', '=base64xxx=')
   addImage('foo', 'werqreqwre')
   console.log(embedImage(
@@ -991,7 +1011,7 @@ const timeScale = ref(100)
 const notes = ref([])
 
 // 【图床】
-const imageDatabase = ref({"1":"1"})
+const imageDatabase = ref({ "1": "1" })
 
 /**
  * @param {String} name
@@ -1263,5 +1283,37 @@ div#md-content h1 {
 
 .md-editor-content {
   font-size: 2em;
+}
+
+.md-display {
+  overflow-y: scroll;
+  width: 100%;
+}
+
+#toggle-theme {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+}
+</style>
+<style>
+.md-display img {
+  max-width: 100%;
+  max-height: 400px;
+  /* object-fit: contain; */
+}
+
+.md-display h1 {
+  font-size: 3em;
+  margin-top: 8px;
+  margin-bottom: 8px;
+  /* object-fit: contain; */
+}
+
+.md-display p {
+  font-size: 1.5em;
+  margin-top: 8px;
+  margin-bottom: 8px;
+  /* object-fit: contain; */
 }
 </style>

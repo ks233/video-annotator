@@ -20,6 +20,9 @@ importers:
       '@vueuse/math':
         specifier: ^13.2.0
         version: 13.2.0(vue@3.5.14)
+      marked:
+        specifier: ^15.0.12
+        version: 15.0.12
       md-editor-v3:
         specifier: ^5.6.0
         version: 5.6.0(vue@3.5.14)
@@ -772,6 +775,11 @@ packages:
 
   markdown-it@14.1.0:
     resolution: {integrity: sha512-a54IwgWPaeBCAAsv13YgmALOF1elABB08FxO9i+r4VFk5Vl4pKokRPeX8u5TCgSsPi6ec1otfLjdOpVcgbpshg==}
+    hasBin: true
+
+  marked@15.0.12:
+    resolution: {integrity: sha512-8dD6FusOQSrpv9Z1rdNMdlSgQOIP880DHqnohobOmYLElGEqAL/JvxvuxZO16r4HtjTlfPRDC1hbvxC9dPN2nA==}
+    engines: {node: '>= 18'}
     hasBin: true
 
   md-editor-v3@5.6.0:
@@ -2009,6 +2017,8 @@ snapshots:
       mdurl: 2.0.0
       punycode.js: 2.3.1
       uc.micro: 2.1.0
+
+  marked@15.0.12: {}
 
   md-editor-v3@5.6.0(vue@3.5.14):
     dependencies:

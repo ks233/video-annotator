@@ -3,7 +3,7 @@
     <v-navigation-drawer v-model="drawer">
       <v-list>
         <v-list-item v-for="note in notes" :key="note.id" :subtitle="note.timeString" :title="note.title"
-          @click="selectAndGotoNote(note)" color="primary" :variant="note.isSelcted ? 'outlined' : 'flat'">
+          @click="selectAndSeekNote(note)" color="primary" :variant="note.isSelcted ? 'outlined' : 'flat'">
           <v-card class="h-100 w-100" color="grey"></v-card>
         </v-list-item>
       </v-list>
@@ -13,9 +13,10 @@
       <v-row class="px-4 justify-center pt-3">
         <!-- 视频 -->
         <v-col :cols="8">
-          <v-sheet height="70vh" :elevation="8">
+          <v-sheet class="d-flex" height="70vh" :elevation="8">
             <video ref="videoPlayer" id="my-player" class="video-js" controls preload="auto">
             </video>
+            <div id="md-content" class="pa-10" v-if="!showVideo" v-html="mdContent"></div>
           </v-sheet>
         </v-col>
         <!-- Markdown 笔记框 -->
@@ -56,7 +57,7 @@
         <div ref="videoTimeline" class="flex-grow-1 cursor-move" @wheel.prevent="onTimelineScroll"
           color="grey-lighten-2">
           <v-sheet :height="timelineHeight" @mousedown.left="startDragTimeline" color="grey-lighten-3"
-            @click.right.prevent.stop :width="Math.max(windowWidth, videoLength * timeScale)" >
+            @click.right.prevent.stop :width="Math.max(windowWidth, videoLength * timeScale)">
 
             <!-- 表示当前播放时间的线，始终在 timeline 中间 -->
             <v-divider :thickness="3" class="center-line border-opacity-75" vertical color="red-lighten-1"
@@ -110,19 +111,27 @@
             <!-- 一堆按钮 -->
             <v-col :cols="6" class="d-flex align-center justify-center">
               <!-- 用 mousedown.prevent 阻止按钮在点击后获取焦点，否则按下空格时聚焦的按钮也会被触发 -->
-              <v-btn @mousedown.prevent @click="drawer = !drawer" class="mx-1" icon="mdi-list-box-outline" size="x-large"></v-btn>
+              <v-btn @mousedown.prevent @click="drawer = !drawer" class="mx-1" icon="mdi-list-box-outline"
+                size="x-large"></v-btn>
               <v-btn @mousedown.prevent @click="showVideo = !showVideo" class="mx-1"
                 :icon="showVideo ? 'mdi-television-off' : 'mdi-television'" size="x-large"></v-btn>
               <v-divider vertical class="mx-5"></v-divider>
-              <v-btn @mousedown.prevent @click="seekPreviousNote()" class="mx-1" icon="mdi-skip-backward-outline" size="x-large"></v-btn>
-              <v-btn @mousedown.prevent @click="play()" class="mx-1" :icon="isPlaying ? 'mdi-pause' : 'mdi-play-outline'"
+              <v-btn @mousedown.prevent @click="seekPreviousNote()" class="mx-1" icon="mdi-skip-backward-outline"
                 size="x-large"></v-btn>
-              <v-btn @mousedown.prevent @click="seekNextNote()" class="mx-1" icon="mdi-skip-forward-outline" size="x-large"></v-btn>
+              <v-btn @mousedown.prevent @click="play()" class="mx-1"
+                :icon="isPlaying ? 'mdi-pause' : 'mdi-play-outline'" size="x-large"></v-btn>
+              <v-btn @mousedown.prevent @click="seekNextNote()" class="mx-1" icon="mdi-skip-forward-outline"
+                size="x-large"></v-btn>
               <v-divider vertical class="mx-5"></v-divider>
-              <v-btn @mousedown.prevent @click="addDefaultNote()" class="mx-1" icon="mdi-text-box-plus-outline" size="x-large"></v-btn>
-              <v-btn @mousedown.prevent @click="deleteCurrentNote()" class="mx-1" icon="mdi-delete-outline" size="x-large"></v-btn>
+              <v-btn @mousedown.prevent @click="addDefaultNote()" class="mx-1" icon="mdi-text-box-plus-outline"
+                size="x-large"></v-btn>
+              <v-btn @mousedown.prevent @click="deleteCurrentNote()" class="mx-1" icon="mdi-delete-outline"
+                size="x-large"></v-btn>
               <v-divider vertical class="mx-5"></v-divider>
-              <v-btn @mousedown.prevent @click="saveNoteJSON()" class="mx-1" icon="mdi-content-save-outline" size="x-large"></v-btn>
+              <v-btn @mousedown.prevent @click="saveNoteJSON()" class="mx-1" icon="mdi-content-save-outline"
+                size="x-large"></v-btn>
+              <v-btn @mousedown.prevent @click="loadFromURL()" class="mx-1" icon="mdi-link-plus"
+                size="x-large"></v-btn>
             </v-col>
             <v-col>
             </v-col>
@@ -130,27 +139,33 @@
         </v-col>
 
         <!-- BPM 与偏移量调整 -->
-        <v-row class="justify-center align-center">
-          <v-col :cols="8" class="mt-5">
-            <v-row class="px-10">
-              <v-number-input class="w-25" v-model="tlMarkerBPM" label="BPM" control-variant="stacked" :min="30"
-                :max="300" :precision="1"></v-number-input>
-              <v-number-input class="w-25" v-model="tlMarkerBeat" label="Beat" control-variant="stacked" :min="1"
-                :max="20"></v-number-input>
-            </v-row>
-            <v-row class="w-100 pl-7 my-0">
-              <v-slider v-model="tlMarkerOffset" :min="0" :max="tlMarkerBeat"></v-slider>
-            </v-row>
-          </v-col>
-          <v-col></v-col>
-        </v-row>
+        <v-col :cols="4">
+          <v-row class="">
+            <v-col :cols="8" class="mt-5">
+              <v-row class="px-10">
+                <v-number-input class="w-25" v-model="tlMarkerBPM" label="BPM" control-variant="stacked" :min="30"
+                  :max="300" :precision="1"></v-number-input>
+                <v-number-input class="w-25" v-model="tlMarkerBeat" label="Beat" control-variant="stacked" :min="1"
+                  :max="20"></v-number-input>
+              </v-row>
+              <v-row class="w-100 pl-7 my-0">
+                <v-slider v-model="tlMarkerOffset" :min="0" :max="tlMarkerBeat"></v-slider>
+              </v-row>
+            </v-col>
+            <v-col>
+              <v-btn @mousedown.prevent @click="useMetronome = !useMetronome" class="mx-1" icon="mdi-metronome"
+                size="x-large"></v-btn>
+            </v-col>
+          </v-row>
+        </v-col>
       </v-row>
       <!-- 一些 debug 用的信息 -->
       <v-row v-if="debugMode" class="px-6">
         <v-btn @click="debug()">debug</v-btn>
         {{ offsetX }} / {{ windowWidth }} / {{ tlMarkerDensity }} / {{ tlBigMarkerDensity }} / {{ tlBigMarkerCull }}<br>
-        timescale: {{ timeScale }}<br>
+        timescale: {{ timeScale }} / showVideo {{ showVideo }} {{ mdContent }}<br>
         timelineMarkerCount: {{ tlMarkerCount }} bpm {{ tlMarkerBPM }} offset {{ tlMarkerOffset }}
+
       </v-row>
 
 
@@ -169,7 +184,9 @@ import { onMounted, ref, computed, watch, onUnmounted } from 'vue'
 
 import { nanoid } from 'nanoid'
 
-const debugMode = ref(false)
+import { marked } from 'marked';
+
+const debugMode = ref(true)
 
 const videoFileName = ref('SampleVideo')
 
@@ -183,6 +200,23 @@ const videoLength = ref(100)
 const videoTimeline = ref(null)
 const draggingTimeline = ref(false)
 const draggingTimestamp = ref(false)
+
+const mdContent = ref('')
+
+const selectedNote = ref({
+  id: "default",
+  time: 0,
+  text: ""
+}
+)
+
+watch(selectedNote, (note) => {
+  if (note != null) {
+    mdContent.value = marked.parse(note.text)
+  }
+}, {
+  deep: true
+})
 
 // 【时间轴与刻度】
 const timelineHeight = ref(100)
@@ -233,17 +267,14 @@ const offsetX = ref(0)
 // 在 video 的 play 和 pause 事件中更新该值，仅用于显示播放器按钮的图标
 const isPlaying = ref(false)
 
-const selectedNote = ref({
-  id: "default",
-  time: 0,
-  text: ""
-}
-)
-
 const showVideo = ref(true)
 watch(showVideo, (v) => {
   document.getElementById('my-player').style.setProperty('display', v ? "inline-block" : "none")
 })
+
+const useMetronome = ref(false)
+const metronomeStart = ref(Date.now())
+
 
 onMounted(() => {
   player.value = videojs(videoPlayer.value, {
@@ -264,9 +295,9 @@ onMounted(() => {
       // durationDisplay: false
     },
     playbackRates: speedList,
-    // userActions: {
-    //   doubleClick: false
-    // }
+    userActions: {
+      doubleClick: false
+    }
   }, () => {
     seek(0)
   })
@@ -280,6 +311,7 @@ onMounted(() => {
   })
   player.value.on('play', () => {
     isPlaying.value = true
+    metronomeStart.value = Date.now() - player.value.currentTime() * 1000
   })
   player.value.on('ratechange', () => {
     currentSpeedIndex.value = speedList.findIndex(n => n == player.value.playbackRate())
@@ -299,6 +331,23 @@ onMounted(() => {
   // 拖拽时间轴和时间戳，只有 mousedown 不是全局
   document.addEventListener('mousemove', globalMouseMove);
   document.addEventListener('mouseup', globalMouseUp);
+
+  var prevTime = 0
+  var delta = 0
+  var nextBeat = 0
+  var nextBeatTime = 0
+  setInterval(function () {
+    delta = (Date.now() - metronomeStart.value) / 1000 - tlMarkerOffset.value * tlMarkerInterval.value;
+    nextBeat = Math.ceil(prevTime / tlMarkerInterval.value)
+    nextBeatTime = nextBeat * tlMarkerInterval.value
+    if (delta > nextBeatTime) {
+      if (useMetronome.value && isPlaying.value) {
+        playMetronome(nextBeat % tlMarkerBeat.value == 0)
+      }
+    }
+    prevTime = delta
+    // alternatively just show wall clock time:
+  }, 10); // 每 0.01s 更新一下计时器
 })
 
 onUnmounted(() => {
@@ -460,6 +509,7 @@ const keyF = keys['f']
 whenever(logicAnd(keyD, notUsingInput), (v) => {
   if (!player.value.paused()) return; // 只在视频暂停的时候启用该功能
   seek(currentTime.value - 0.04) // 随便写个很短的时间假装逐帧调整
+  metronomeStart.value = Date.now() - player.value.currentTime() * 1000
 })
 
 whenever(logicAnd(keyF, notUsingInput), (v) => {
@@ -602,6 +652,8 @@ function onTimelineScroll(event) {
 
 function debug() {
   console.log(notes.value)
+  var audio = new Audio('metronome_down.wav');
+  audio.play();
 }
 
 // 【添加和删除笔记】
@@ -627,7 +679,7 @@ function addDefaultNote() {
 }
 
 function deleteNote(note, regUndo = false) {
-  if(notes.value.length == 0) return;
+  if (notes.value.length == 0) return;
   var index = notes.value.indexOf(note);
   if (regUndo) {
     let noteCopy = note.clone()
@@ -664,11 +716,11 @@ function onTimestampClick(event, note) {
   if (event.clientX != startDragXts) {
     return;
   } else {
-    selectAndGotoNote(note)
+    selectAndSeekNote(note)
   }
 }
 
-function selectAndGotoNote(note) {
+function selectAndSeekNote(note) {
   selectedNote.value = note
   seek(note.time)
 }
@@ -797,6 +849,11 @@ function updateTime() {
   selectNoteByCurrentTime()
 }
 
+function playMetronome(firstBeat) {
+  var audio = new Audio(firstBeat ? 'metronome_up.wav' : 'metronome_down.wav');
+  audio.play();
+}
+
 function play() {
   if (player.value.paused()) {
     player.value.play();
@@ -807,6 +864,7 @@ function play() {
 
 function seek(time) {
   player.value.currentTime(time.clamp(0, videoLength.value));
+  metronomeStart.value = Date.now() - time * 1000
 }
 
 const timeScale = ref(100)
@@ -883,6 +941,10 @@ function loadNoteJSON(file) {
     selectNoteByCurrentTime()
   };
   reader.readAsText(file);
+}
+
+function loadFromURL(){
+
 }
 
 // 浏览器是否支持直接读写文件
@@ -997,4 +1059,7 @@ function loadSaveData(saveData) {
   margin-top: -6px;
 }
 
+div#md-content h1 {
+  font-size: 5em
+}
 </style>

@@ -30,8 +30,26 @@
       </v-row>
 
       <!-- 显示当前时间 -->
-      <v-row class="justify-center">
-        {{ toHHMMSS(currentTime) }} / {{ toHHMMSS(videoLength) }} [{{ speedList[currentSpeedIndex] }}x]
+      <v-row>
+        <v-col class="pt-0 pl-7">
+          {{ videoFileName }}
+        </v-col>
+        <v-col class="pt-0 font-size-large time-text">
+          {{ toHHMMSS(currentTime) }} / {{ toHHMMSS(videoLength) }} [{{ speedList[currentSpeedIndex] }}x]
+        </v-col>
+        <v-col class="pt-0 pl-0">
+          <template v-if="supportFSHandle">
+            <template v-if="noteFileHandle != null">
+              ✅ RW: "{{ noteFileHandle.name }}"
+            </template>
+            <template v-else>
+              ℹ️ DL: "{{ videoFileName }}.txt"
+            </template>
+          </template>
+          <template v-else>
+            ℹ️ DL: "{{ videoFileName }}.txt"。
+          </template>
+        </v-col>
       </v-row>
 
 
@@ -93,15 +111,16 @@
             <!-- 控制播放的一堆按钮 -->
             <v-col :cols="6" class="d-flex align-center justify-center">
               <v-btn @click="drawer = !drawer" class="mx-1" icon="mdi-list-box-outline" size="x-large"></v-btn>
+              <v-btn @click="drawer = !drawer" class="mx-1" icon="mdi-list-box-outline" size="x-large"></v-btn>
               <v-divider vertical class="mx-5"></v-divider>
               <v-btn @click="seekPreviousNote()" class="mx-1" icon="mdi-skip-backward-outline" size="x-large"></v-btn>
               <v-btn @click="play()" class="mx-1" icon="mdi-play-outline" size="x-large"></v-btn>
               <v-btn @click="seekNextNote()" class="mx-1" icon="mdi-skip-forward-outline" size="x-large"></v-btn>
               <v-divider vertical class="mx-5"></v-divider>
-              <v-btn @click="addDefaultNote()" class="mx-1" icon="mdi-plus-outline" size="x-large"></v-btn>
+              <v-btn @click="addDefaultNote()" class="mx-1" icon="mdi-text-box-plus-outline" size="x-large"></v-btn>
               <v-btn @click="deleteCurrentNote()" class="mx-1" icon="mdi-delete-outline" size="x-large"></v-btn>
               <v-divider vertical class="mx-5"></v-divider>
-              <v-btn @click="saveNoteJSON()" class="mx-1" icon="mdi-download-outline" size="x-large"></v-btn>
+              <v-btn @click="saveNoteJSON()" class="mx-1" icon="mdi-content-save-outline" size="x-large"></v-btn>
             </v-col>
             <v-col>
             </v-col>
@@ -126,10 +145,9 @@
       </v-row>
       <!-- 一些 debug 用的信息 -->
       <v-row v-if="debugMode" class="px-6">
-
         <v-btn @click="debug()">debug</v-btn>
         {{ offsetX }} / {{ windowWidth }} / {{ tlMarkerDensity }} / {{ tlBigMarkerDensity }} / {{ tlBigMarkerCull }}<br>
-        timescale: {{ timeScale }} bpmSetting {{ bpmSetting }}<br>
+        timescale: {{ timeScale }}<br>
         timelineMarkerCount: {{ tlMarkerCount }} bpm {{ tlMarkerBPM }} offset {{ tlMarkerOffset }}
       </v-row>
 
@@ -149,24 +167,9 @@ import { onMounted, ref, computed, watch, onUnmounted } from 'vue'
 
 import { nanoid } from 'nanoid'
 
-const debugMode=ref(false)
-
-const timelineHeight = ref(100)
-const tlMarkerRatio = ref(0.15)
-const tlMarkerMinorRatio = ref(0.08)
-const tlMarkerBPM = ref(60)
-const tlMarkerInterval = computed(() => 60.0 / tlMarkerBPM.value)
-const tlMarkerBeat = ref(4)
-const tlMarkerOffset = ref(0)
-const tlMarkerCount = computed(() => {
-  return Math.ceil(videoLength.value / tlMarkerInterval.value)
-})
+const debugMode = ref(false)
 
 const videoFileName = ref('SampleVideo')
-
-// 0: 节拍器
-// 1: 吸附
-const bpmSetting = ref([])
 
 const videoPlayer = ref(null)
 const player = ref(null)
@@ -179,6 +182,23 @@ const videoTimeline = ref(null)
 const draggingTimeline = ref(false)
 const draggingTimestamp = ref(false)
 
+// 【时间轴与刻度】
+const timelineHeight = ref(100)
+// 刻度的高度比例
+const tlMarkerRatio = ref(0.15)
+const tlMarkerMinorRatio = ref(0.08)
+// 用 BPM 定义刻度的间隔
+const tlMarkerBPM = ref(60)
+const tlMarkerInterval = computed(() => 60.0 / tlMarkerBPM.value)
+// 大刻度
+const tlMarkerBeat = ref(4)
+// 刻度的整体时间偏移
+const tlMarkerOffset = ref(0)
+// 覆盖整个视频时间需要的刻度数量
+const tlMarkerCount = computed(() => {
+  return Math.ceil(videoLength.value / tlMarkerInterval.value)
+})
+
 // 剔除屏幕外的时间轴刻度、刻度密集时降它们间隔隐藏
 function VisibleOnTimeline(time) {
   if (timeToOffset(time) < offsetX.value - windowWidth.value * 0.5)
@@ -188,10 +208,12 @@ function VisibleOnTimeline(time) {
   return true
 }
 
+// 根据刻度间隔，计算屏幕中的刻度数量
 const tlMarkerDensity = computed(() => {
   return windowWidth.value / tlMarkerInterval.value / timeScale.value
 })
 
+// 屏幕中大刻度的数量
 const tlBigMarkerDensity = computed(() => {
   return tlMarkerDensity.value / tlMarkerBeat.value
 })
@@ -203,11 +225,11 @@ const tlBigMarkerCull = computed(() => {
 
 const windowWidth = ref(0)
 
+// 刻度根据视频时间整体偏移
 const offsetX = ref(0)
 
-const videoFileInput = ref(null)
-
 const selectedNote = ref({
+  id: "default",
   time: 0,
   text: ""
 }
@@ -244,7 +266,6 @@ onMounted(() => {
   })
 
   player.value.on('ratechange', () => {
-    // console.log(player.value.playbackRate())
     currentSpeedIndex.value = speedList.findIndex(n => n == player.value.playbackRate())
   })
 
@@ -256,7 +277,9 @@ onMounted(() => {
   document.addEventListener('drop', dropFile);
 
   // 避免 markdown 编辑器在不聚焦时响应 Ctrl-Z
-  document.addEventListener('keydown', preventCtrlZ);
+  // 屏蔽浏览器 Ctrl-S 保存网页
+  document.addEventListener('keydown', preventHotkeys);
+  document.addEventListener('keyup', preventHotkeys);
   // 拖拽时间轴和时间戳，只有 mousedown 不是全局
   document.addEventListener('mousemove', globalMouseMove);
   document.addEventListener('mouseup', globalMouseUp);
@@ -268,9 +291,9 @@ onUnmounted(() => {
   document.removeEventListener('dragover', prevent);
   document.removeEventListener('drop', dropFile);
 
-  // 避免 markdown 编辑器在不聚焦时响应 Ctrl-Z
-  document.removeEventListener('keydown', preventCtrlZ);
-  // 拖拽时间轴和时间戳，只有 mousedown 不是全局
+  document.removeEventListener('keydown', preventHotkeys);
+  document.removeEventListener('keyup', preventHotkeys);
+
   document.removeEventListener('mousemove', globalMouseMove);
   document.removeEventListener('mouseup', globalMouseUp);
 })
@@ -296,19 +319,37 @@ function globalMouseUp(event) {
   }
 }
 
-function preventCtrlZ(event) {
-  if (event.ctrlKey && event.key === 'z') {
+function preventHotkeys(event) {
+  if (event.ctrlKey && (event.key === 'z' || event.key === 's')) {
     if (notUsingInput.value) {
       event.preventDefault();
     }
   }
 }
 
-function dropFile(event) {
+const noteFileHandle = ref(null)
+
+async function dropFile(event) {
+  const items = event.dataTransfer.items;
   Array.from(event.dataTransfer.files).forEach(file => {
     loadFile(file)
   });
   event.preventDefault()
+  // 如果浏览器支持使用 FileSystemHandle，记录笔记文件的 handle，以便保存时直接保存到原文件中
+  for (const item of items) {
+    console.log(item)
+    if (item.kind === 'file' && item.type == 'text/plain' && item.getAsFileSystemHandle) {
+      const handle = await item.getAsFileSystemHandle();
+      console.log(handle)
+      if (handle.kind === 'file') {
+        noteFileHandle.value = handle;
+        console.log(noteFileHandle.value)
+        // await handleFile(handle);
+      } else {
+        noteFileHandle.value = null
+      }
+    }
+  }
 }
 
 function prevent(event) {
@@ -331,6 +372,15 @@ const notUsingInput = computed(() =>
 )
 
 const keys = useMagicKeys()
+
+
+// Ctrl-S 保存，这个可以在编辑器里触发
+const keyCtrlS = keys['ctrl+s']
+whenever(keyCtrlS, (v) => {
+  saveNoteJSON();
+})
+
+
 
 // 【播放速度控制】
 
@@ -738,33 +788,7 @@ function seek(time) {
 
 const timeScale = ref(100)
 
-const notes = ref([
-  {
-    "id": '1',
-    "time": 0.946316,
-    "text": "# 这是一个示例视频\n\n一只鸟"
-  },
-  {
-    "id": '2',
-    "time": 5.456315,
-    "text": "# 一群鱼"
-  },
-  {
-    "id": '3',
-    "time": 12.204623,
-    "text": "# 一群鸟抓鱼"
-  },
-  {
-    "id": '4',
-    "time": 34.311123,
-    "text": "# 鲨鱼"
-  },
-  {
-    "id": '5',
-    "time": 42.747532,
-    "text": "# 鲸鱼"
-  }
-])
+const notes = ref([])
 
 
 function firstLine(str) {
@@ -813,8 +837,16 @@ function download(content, fileName, contentType) {
   a.click();
 }
 
-function saveNoteJSON() {
-  download(JSON.stringify(notes.value), videoFileName.value + '.txt', 'text/plain');
+async function saveNoteJSON() {
+  let json = JSON.stringify(notes.value)
+  if (noteFileHandle.value != null) {
+    console.log('write')
+    const writable = await noteFileHandle.value.createWritable();
+    await writable.write(json);
+    await writable.close();
+  } else {
+    download(json, videoFileName.value + '.txt', 'text/plain');
+  }
 }
 
 function loadNoteJSON(file) {
@@ -828,6 +860,14 @@ function loadNoteJSON(file) {
   reader.readAsText(file);
 }
 
+// 浏览器是否支持直接读写文件
+const supportFSHandle = computed(() => {
+  return (
+    typeof window.showOpenFilePicker === 'function' &&
+    typeof window.showSaveFilePicker === 'function' &&
+    typeof window.showDirectoryPicker === 'function'
+  );
+})
 
 /**
  * Returns a number whose value is limited to the given range.
@@ -876,5 +916,11 @@ Number.prototype.clamp = function (min, max) {
   /* IE 10 and IE 11 */
   user-select: none;
   /* Standard syntax */
+}
+
+.time-text {
+  font-size: 1.5em;
+  padding: 0;
+  margin-top: -6px;
 }
 </style>

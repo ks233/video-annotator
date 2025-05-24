@@ -37,7 +37,8 @@
 
       <!-- 时间轴 -->
       <v-row>
-        <div ref="videoTimeline" class="flex-grow-1 cursor-move" @wheel.prevent="onTimelineScroll" color="grey-lighten-2">
+        <div ref="videoTimeline" class="flex-grow-1 cursor-move" @wheel.prevent="onTimelineScroll"
+          color="grey-lighten-2">
           <v-sheet :height="timelineHeight" @mousedown.left="startDragTimeline" color="grey-lighten-3"
             @click.right.prevent.stop :width="Math.max(windowWidth, videoLength * timeScale)">
 
@@ -67,8 +68,8 @@
             <template v-for="i in tlMarkerCount">
               <template v-if="VisibleOnTimeline((i - 1 + tlMarkerOffset) * tlMarkerInterval)">
                 <!-- 大 -->
-                <v-divider v-if="i % tlMarkerBeat == 1 && parseInt(i / tlMarkerBeat) % tlBigMarkerCull == 0" :thickness="2"
-                  class="border-opacity-25" vertical :style="{
+                <v-divider v-if="i % tlMarkerBeat == 1 && parseInt(i / tlMarkerBeat) % tlBigMarkerCull == 0"
+                  :thickness="2" class="border-opacity-25" vertical :style="{
                     'position': 'absolute', 'left': ((i - 1 + tlMarkerOffset) * tlMarkerInterval * timeScale - offsetX) + 'px',
                     'height': timelineHeight * tlMarkerRatio + 'px',
                     transform: `translateY(${timelineHeight * (1 - tlMarkerRatio)}px)`
@@ -106,10 +107,10 @@
             </v-col>
           </v-row>
         </v-col>
-        <!-- BPM 与偏移量调整 -->
 
+        <!-- BPM 与偏移量调整 -->
         <v-row class="justify-center align-center">
-          <v-col class="mt-5">
+          <v-col :cols="8" class="mt-5">
             <v-row class="px-10">
               <v-number-input class="w-25" v-model="tlMarkerBPM" label="BPM" control-variant="stacked" :min="30"
                 :max="300" :precision="1"></v-number-input>
@@ -124,7 +125,7 @@
         </v-row>
       </v-row>
       <!-- 一些 debug 用的信息 -->
-      <v-row class="px-6">
+      <v-row v-if="debugMode" class="px-6">
 
         <v-btn @click="debug()">debug</v-btn>
         {{ offsetX }} / {{ windowWidth }} / {{ tlMarkerDensity }} / {{ tlBigMarkerDensity }} / {{ tlBigMarkerCull }}<br>
@@ -147,6 +148,8 @@ import 'md-editor-v3/lib/style.css';
 import { onMounted, ref, computed, watch, onUnmounted } from 'vue'
 
 import { nanoid } from 'nanoid'
+
+const debugMode=ref(false)
 
 const timelineHeight = ref(100)
 const tlMarkerRatio = ref(0.15)
@@ -189,12 +192,12 @@ const tlMarkerDensity = computed(() => {
   return windowWidth.value / tlMarkerInterval.value / timeScale.value
 })
 
-const tlBigMarkerDensity = computed(()=>{
+const tlBigMarkerDensity = computed(() => {
   return tlMarkerDensity.value / tlMarkerBeat.value
 })
 
 // 大刻度每 n 个显示一个
-const tlBigMarkerCull = computed(()=>{
+const tlBigMarkerCull = computed(() => {
   return Math.ceil(tlBigMarkerDensity.value / 300)
 })
 

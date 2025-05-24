@@ -13,9 +13,8 @@
       <v-row class="px-4 justify-center pt-3">
         <!-- 视频 -->
         <v-col :cols="8">
-          <v-sheet class="d-flex" height="70vh" :elevation="8">
-            <video ref="videoPlayer" id="my-player" class="video-js" controls preload="auto">
-            </video>
+          <v-sheet class="d-flex" height="70vh" :elevation="2">
+            <video ref="videoPlayer" id="my-player" class="video-js"></video>
             <div id="md-content" class="pa-10" v-if="!showVideo" v-html="mdContent"></div>
           </v-sheet>
         </v-col>
@@ -29,7 +28,7 @@
       </v-row>
 
       <!-- 显示当前时间 -->
-      <v-row>
+      <v-row class="mt-1">
         <v-col class="pt-0 pl-7">
           {{ videoFileName }}
         </v-col>
@@ -54,9 +53,8 @@
 
       <!-- 时间轴 -->
       <v-row>
-        <div ref="videoTimeline" class="flex-grow-1 cursor-move" @wheel.prevent="onTimelineScroll"
-          color="grey-lighten-2">
-          <v-sheet :height="timelineHeight" @mousedown.left="startDragTimeline" color="grey-lighten-3"
+        <div ref="videoTimeline" class="mt-n2 flex-grow-1 cursor-move" @wheel.prevent="onTimelineScroll">
+          <v-sheet :height="timelineHeight" @mousedown.left="startDragTimeline" color="rgb(var(--v-theme-timeline))"
             @click.right.prevent.stop :width="Math.max(windowWidth, videoLength * timeScale)">
 
             <!-- 表示当前播放时间的线，始终在 timeline 中间 -->
@@ -130,8 +128,7 @@
               <v-divider vertical class="mx-5"></v-divider>
               <v-btn @mousedown.prevent @click="saveNoteJSON()" class="mx-1" icon="mdi-content-save-outline"
                 size="x-large"></v-btn>
-              <v-btn @mousedown.prevent @click="loadFromURL()" class="mx-1" icon="mdi-link-plus"
-                size="x-large"></v-btn>
+              <v-btn @mousedown.prevent @click="loadFromURL()" class="mx-1" icon="mdi-link-plus" size="x-large"></v-btn>
             </v-col>
             <v-col>
             </v-col>
@@ -140,21 +137,22 @@
 
         <!-- BPM 与偏移量调整 -->
         <v-col :cols="4">
-          <v-row class="">
+          <v-row>
             <v-col :cols="8" class="mt-5">
-              <v-row class="px-10">
+              <v-row>
                 <v-number-input class="w-25" v-model="tlMarkerBPM" label="BPM" control-variant="stacked" :min="30"
-                  :max="300" :precision="1"></v-number-input>
+                  :max="300" :precision="2"></v-number-input>
                 <v-number-input class="w-25" v-model="tlMarkerBeat" label="Beat" control-variant="stacked" :min="1"
                   :max="20"></v-number-input>
               </v-row>
-              <v-row class="w-100 pl-7 my-0">
-                <v-slider v-model="tlMarkerOffset" :min="0" :max="tlMarkerBeat"></v-slider>
+              <v-row class="w-100 my-0">
+                <v-slider class="ml-0 mr-n6" label="Offset" v-model="tlMarkerOffset" :min="0"
+                  :max="tlMarkerBeat"></v-slider>
               </v-row>
             </v-col>
             <v-col>
-              <v-btn @mousedown.prevent @click="useMetronome = !useMetronome" class="mx-1" icon="mdi-metronome"
-                size="x-large"></v-btn>
+              <v-btn @click="useMetronome = !useMetronome" class="mx-1" icon="mdi-metronome" size="x-large"
+                :color="useMetronome ? 'blue-lighten-1' : 'rgb(var(--v-theme-surface))'"></v-btn>
             </v-col>
           </v-row>
         </v-col>
@@ -176,6 +174,8 @@
 import videojs from 'video.js';
 import "video.js/dist/video-js.css"
 
+import "videojs-youtube"
+
 import { MdEditor } from 'md-editor-v3';
 import 'md-editor-v3/lib/preview.css';
 import 'md-editor-v3/lib/style.css';
@@ -195,7 +195,7 @@ const player = ref(null)
 const drawer = ref(true)
 
 const currentTime = ref(0)
-const videoLength = ref(100)
+const videoLength = ref(273)
 
 const videoTimeline = ref(null)
 const draggingTimeline = ref(false)
@@ -219,7 +219,7 @@ watch(selectedNote, (note) => {
 })
 
 // 【时间轴与刻度】
-const timelineHeight = ref(100)
+const timelineHeight = ref(90)
 // 刻度的高度比例
 const tlMarkerRatio = ref(0.15)
 const tlMarkerMinorRatio = ref(0.08)
@@ -279,12 +279,6 @@ const metronomeStart = ref(Date.now())
 onMounted(() => {
   player.value = videojs(videoPlayer.value, {
     controls: true,
-    sources: [
-      {
-        src: "//vjs.zencdn.net/v/oceans.mp4",
-        type: 'video/mp4',
-      }
-    ],
     controlBar: {
       // remainingTimeDisplay: false,
       // fullscreenToggle: false,
@@ -297,6 +291,12 @@ onMounted(() => {
     playbackRates: speedList,
     userActions: {
       doubleClick: false
+    },
+    // children: ["MediaLoader"],
+    techOrder: ["html5", "youtube"],
+    youtube: {
+      ytControls: 2,
+      iv_load_policy: 3
     }
   }, () => {
     seek(0)
@@ -905,6 +905,7 @@ function loadFile(file) {
   } else {
     console.log(file)
     videoFileName.value = file.name
+    player.value.controls(true)
     player.value.src({ type: file.type, src: fileURL })
     seek(0)
   }
@@ -943,8 +944,22 @@ function loadNoteJSON(file) {
   reader.readAsText(file);
 }
 
-function loadFromURL(){
+function loadYoutubeVideo(url) {
+  player.value.src({ type: 'video/youtube', src: url })
+  player.value.controls(false)
+}
 
+function loadFromURL() {
+  let url = prompt('url', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+  if (url) {
+    loadYoutubeVideo(url)
+  }
+
+  // fetch(url)
+  //   .then(res => res.json())
+  //   .then(out =>
+  //     console.log('Checkout this JSON! ', out))
+  //   .catch(err => console.log(err));
 }
 
 // 浏览器是否支持直接读写文件
@@ -1054,12 +1069,20 @@ function loadSaveData(saveData) {
 }
 
 .time-text {
-  font-size: 1.5em;
+  font-size: 1.2em;
   padding: 0;
-  margin-top: -6px;
+  margin-top: -2px;
 }
 
 div#md-content h1 {
   font-size: 5em
+}
+
+.v-theme--light {
+  --v-theme-timeline: 240, 240, 240;
+}
+
+.v-theme--dark {
+  --v-theme-timeline: 60, 60, 60;
 }
 </style>

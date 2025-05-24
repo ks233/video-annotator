@@ -32,6 +32,9 @@ importers:
       video.js:
         specifier: ^8.22.0
         version: 8.22.0
+      videojs-youtube:
+        specifier: ^3.0.1
+        version: 3.0.1(video.js@8.22.0)
       vue:
         specifier: ^3.5.13
         version: 3.5.14
@@ -1110,6 +1113,11 @@ packages:
 
   videojs-vtt.js@0.15.5:
     resolution: {integrity: sha512-yZbBxvA7QMYn15Lr/ZfhhLPrNpI/RmCSCqgIff57GC2gIrV5YfyzLfLyZMj0NnZSAz8syB4N0nHXpZg9MyrMOQ==}
+
+  videojs-youtube@3.0.1:
+    resolution: {integrity: sha512-0gKgag7Zno/dDwIdk+h48ODKDulR4IW62RxGE81PrMwi0OX/wUcKO6m1j+DFYI+7qjtWMZTKnbtQoHGxvUrFQg==}
+    peerDependencies:
+      video.js: 5.x || 6.x || 7.x || 8.x
 
   vite-plugin-vuetify@2.1.1:
     resolution: {integrity: sha512-Pb7bKhQH8qPMzURmEGq2aIqCJkruFNsyf1NcrrtnjsOIkqJPMcBbiP0oJoO8/uAmyB5W/1JTbbUEsyXdMM0QHQ==}
@@ -2353,6 +2361,10 @@ snapshots:
   videojs-vtt.js@0.15.5:
     dependencies:
       global: 4.4.0
+
+  videojs-youtube@3.0.1(video.js@8.22.0):
+    dependencies:
+      video.js: 8.22.0
 
   vite-plugin-vuetify@2.1.1(vite@6.3.5(sass-embedded@1.89.0))(vue@3.5.14)(vuetify@3.8.6):
     dependencies:

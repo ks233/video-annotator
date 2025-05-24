@@ -2,9 +2,9 @@
   <v-app id="main">
     <v-navigation-drawer v-model="drawer">
       <v-list>
-        <v-list-item v-for="note in notes" :key="note.id" :subtitle="toHHMMSS(note.time)"
-          :title="removeTitle(firstLine(note.text))" link @click="selectAndGotoNote(note)">
-
+        <v-list-item v-for="note in notes" :key="note.id" :subtitle="note.timeString" :title="note.title"
+          @click="selectAndGotoNote(note)" color="primary" :variant="note.isSelcted ? 'outlined' : 'flat'">
+          <v-card class="h-100 w-100" color="grey"></v-card>
         </v-list-item>
       </v-list>
     </v-navigation-drawer>
@@ -21,10 +21,8 @@
         <!-- Markdown 笔记框 -->
         <v-col :cols="4" height="70vh">
           <v-sheet height="70vh" class="d-flex" color="grey-lighten-2">
-
             <MdEditor id="md-editor" v-model="selectedNote.text" class="h-100" :toolbars="mdEditorToolbar"
               :preview="false" />
-
           </v-sheet>
         </v-col>
       </v-row>
@@ -75,10 +73,11 @@
             <div class="d-inline-flex timestamp no-select-text" v-for="note in notes" :key="note.id"
               :style="{ 'position': 'absolute', 'left': note.time * timeScale - offsetX + 'px', 'height': timelineHeight + 'px' }">
               <v-divider vertical :thickness="2"></v-divider>
-              <v-card :max-width="250" class="mx-3 my-8 d-flex align-center px-3 overflow-x-hidden"
-                color="grey-lighten-1" height="36" @click="selectAndGotoNote(note)" style="float:left"
-                @mousedown.left.stop @mousedown.right.stop="startDragTimestamp($event, note)"
-                @click.middle.prevent.stop="setNoteToCurrentTime(note)" @click.right.prevent.stop>
+              <v-card :max-width="250" :min-width="48" class="mx-3 my-8 d-flex align-center px-3 overflow-x-hidden"
+                color="grey-lighten-1" height="36" @click="onTimestampClick($event, note)" style="float:left"
+                @mousedown.left.stop="startDragTimestamp($event, note)"
+                @click.middle.prevent.stop="setNoteToCurrentTime(note)"
+                @click.right.prevent.stop="deleteNote(note, true)">
                 {{ removeTitle(firstLine(note.text)) }}
               </v-card>
             </div>
@@ -551,10 +550,6 @@ function setNoteTimeByID(id, time) {
   sortNotes()
 }
 
-function isSelectedNote(note) {
-  return note.id == selectedNote.value.id
-}
-
 // Markdown 编辑器（md-editor-v3）工具栏的按钮布局
 const mdEditorToolbar = ['bold',
   'underline',
@@ -597,7 +592,7 @@ function debug() {
 function addNote(newNote, regUndo = false) {
   notes.value.push(newNote)
   if (regUndo) {
-    let noteCopy = { ...newNote }
+    let noteCopy = newNote.clone()
     let id = newNote.id
     registerCmd(
       {
@@ -611,14 +606,13 @@ function addNote(newNote, regUndo = false) {
 }
 
 function addDefaultNote() {
-  addNote({ id: nanoid(), time: currentTime.value, text: "# New Note" }, true)
+  addNote(new Note(currentTime.value, "# " + (notes.value.length + 1)), true)
 }
 
 function deleteNote(note, regUndo = false) {
   var index = notes.value.indexOf(note);
   if (regUndo) {
-    console.log({ ...note })
-    let noteCopy = { ...note }
+    let noteCopy = note.clone()
     let id = note.id
     registerCmd(
       {
@@ -646,6 +640,14 @@ function deleteNote(note, regUndo = false) {
 
 function deleteCurrentNote() {
   deleteNote(selectedNote.value, true)
+}
+
+function onTimestampClick(event, note) {
+  if (event.clientX != startDragXts) {
+    return;
+  } else {
+    selectAndGotoNote(note)
+  }
 }
 
 function selectAndGotoNote(note) {
@@ -687,11 +689,13 @@ const timestampOffsetX = ref(0)
 let prevXts = 0
 
 const draggedNote = ref(null);
+let startDragXts = 0
 
 function startDragTimestamp(event, note) {
   draggedNote.value = note
   draggingTimestamp.value = true
   prevXts = event.clientX
+  startDragXts = event.clientX
   timestampOffsetX.value = timeToOffset(draggedNote.value.time)
   startRegisterMove(note)
 }
@@ -710,6 +714,7 @@ function dragTimestamp(event) {
 function finishDragTimestamp(event) {
   if (!draggingTimestamp.value) return;
   draggingTimestamp.value = false
+  if (startDragXts == event.clientX) return;
   draggedNote.time = offsetToTime(timestampOffsetX.value)
   finishRegisterMove(draggedNote)
   sortNotes()
@@ -838,7 +843,9 @@ function download(content, fileName, contentType) {
 }
 
 async function saveNoteJSON() {
-  let json = JSON.stringify(notes.value)
+  let saveData = makeSaveData()
+  let json = JSON.stringify(saveData, null, 4)
+
   if (noteFileHandle.value != null) {
     console.log('write')
     const writable = await noteFileHandle.value.createWritable();
@@ -852,8 +859,8 @@ async function saveNoteJSON() {
 function loadNoteJSON(file) {
   var reader = new FileReader();
   reader.onload = event => {
-    var obj = JSON.parse(event.target.result);
-    notes.value = obj
+    var saveData = JSON.parse(event.target.result);
+    loadSaveData(saveData)
     seek(0)
     selectNoteByCurrentTime()
   };
@@ -883,6 +890,54 @@ const supportFSHandle = computed(() => {
 Number.prototype.clamp = function (min, max) {
   return Math.min(Math.max(this, min), max);
 };
+
+class Note {
+  constructor(time, text) {
+    this.id = nanoid()
+    this.time = time
+    this.text = text
+  }
+  get title() {
+    let s = firstLine(removeTitle(this.text)).trim()
+    if (s == '') {
+      return this.timeString
+    }
+    return s
+  }
+  get isSelcted() {
+    return this.id == selectedNote.value.id
+  }
+  get timeString() {
+    return toHHMMSS(this.time)
+  }
+  clone() {
+    const newNote = { ...this }
+    Object.setPrototypeOf(newNote, Note.prototype)
+    return newNote
+  }
+}
+
+function makeSaveData() {
+  const saveData = {
+    markers: {
+      bpm: tlMarkerBPM.value,
+      beat: tlMarkerBeat.value,
+      offset: tlMarkerOffset.value
+    },
+    notes: notes.value
+  }
+  return saveData
+}
+
+function loadSaveData(saveData) {
+  tlMarkerBPM.value = saveData.markers.bpm
+  tlMarkerBeat.value = saveData.markers.beat
+  tlMarkerOffset.value = saveData.markers.offset
+
+  saveData.notes.forEach(note => Object.setPrototypeOf(note, Note.prototype))
+  notes.value = saveData.notes
+}
+
 </script>
 
 <style scoped>

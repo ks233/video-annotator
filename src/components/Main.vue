@@ -22,7 +22,7 @@
         <v-col :cols="4" height="70vh">
           <v-sheet height="70vh" class="d-flex" color="grey-lighten-2">
             <MdEditor id="md-editor" v-model="selectedNote.text" class="h-100" :toolbars="mdEditorToolbar"
-              :preview="false" />
+              :preview="false" :theme="theme.global.name.value" />
           </v-sheet>
         </v-col>
       </v-row>
@@ -113,6 +113,8 @@
                 size="x-large"></v-btn>
               <v-btn @mousedown.prevent @click="showVideo = !showVideo" class="mx-1"
                 :icon="showVideo ? 'mdi-television-off' : 'mdi-television'" size="x-large"></v-btn>
+              <v-btn @mousedown.prevent @click="toggleTheme()" class="mx-1" icon="mdi-brightness-6"
+                size="x-large"></v-btn>
               <v-divider vertical class="mx-5"></v-divider>
               <v-btn @mousedown.prevent @click="seekPreviousNote()" class="mx-1" icon="mdi-skip-backward-outline"
                 size="x-large"></v-btn>
@@ -138,6 +140,12 @@
         <!-- BPM 与偏移量调整 -->
         <v-col :cols="4">
           <v-row>
+            <v-col :cols="3">
+              <v-btn @click="useMetronome = !useMetronome" class="mx-1" icon="mdi-metronome"
+                :color="useMetronome ? 'blue-lighten-1' : '--v-theme-surface'"></v-btn>
+              <v-btn @click="snapToMarker = !snapToMarker" class="mx-1" icon="mdi-magnet"
+                :color="snapToMarker ? 'pink-lighten-1' : '--v-theme-surface'"></v-btn>
+            </v-col>
             <v-col :cols="8" class="mt-5">
               <v-row>
                 <v-number-input class="w-25" v-model="tlMarkerBPM" label="BPM" control-variant="stacked" :min="30"
@@ -149,10 +157,6 @@
                 <v-slider class="ml-0 mr-n6" label="Offset" v-model="tlMarkerOffset" :min="0"
                   :max="tlMarkerBeat"></v-slider>
               </v-row>
-            </v-col>
-            <v-col>
-              <v-btn @click="useMetronome = !useMetronome" class="mx-1" icon="mdi-metronome" size="x-large"
-                :color="useMetronome ? 'blue-lighten-1' : 'rgb(var(--v-theme-surface))'"></v-btn>
             </v-col>
           </v-row>
         </v-col>
@@ -186,7 +190,10 @@ import { nanoid } from 'nanoid'
 
 import { marked } from 'marked';
 
-const debugMode = ref(true)
+import { useTheme } from 'vuetify'
+
+
+const debugMode = ref(false)
 
 const videoFileName = ref('SampleVideo')
 
@@ -209,6 +216,12 @@ const selectedNote = ref({
   text: ""
 }
 )
+
+const theme = useTheme()
+
+function toggleTheme() {
+  theme.global.name.value = theme.global.current.value.dark ? 'light' : 'dark'
+}
 
 watch(selectedNote, (note) => {
   if (note != null) {
@@ -276,6 +289,8 @@ const useMetronome = ref(false)
 const metronomeStart = ref(Date.now())
 
 
+const snapToMarker = ref(false)
+
 onMounted(() => {
   player.value = videojs(videoPlayer.value, {
     controls: true,
@@ -332,6 +347,7 @@ onMounted(() => {
   document.addEventListener('mousemove', globalMouseMove);
   document.addEventListener('mouseup', globalMouseUp);
 
+  // 节拍器设置
   var prevTime = 0
   var delta = 0
   var nextBeat = 0
@@ -348,6 +364,19 @@ onMounted(() => {
     prevTime = delta
     // alternatively just show wall clock time:
   }, 10); // 每 0.01s 更新一下计时器
+
+  // Check to see if Media-Queries are supported
+  if (window.matchMedia) {
+    // Check if the dark-mode Media-Query matches
+    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      theme.global.name.value = 'dark'
+    } else {
+      theme.global.name.value = 'light'
+    }
+  } else {
+    // Default (when Media-Queries are not supported)
+  }
+
 })
 
 onUnmounted(() => {
@@ -538,6 +567,11 @@ let commandStackPointer = -1
 let moveCmd = {
   undo: () => { },
   redo: () => { }
+}
+
+function clearCommandStack(){
+    commandStack = []
+    commandStackPointer = -1
 }
 
 // 注册指令添加到栈中
@@ -938,6 +972,7 @@ function loadNoteJSON(file) {
   reader.onload = event => {
     var saveData = JSON.parse(event.target.result);
     loadSaveData(saveData)
+    clearCommandStack()
     seek(0)
     selectNoteByCurrentTime()
   };
@@ -955,11 +990,11 @@ function loadFromURL() {
     loadYoutubeVideo(url)
   }
 
-  // fetch(url)
-  //   .then(res => res.json())
-  //   .then(out =>
-  //     console.log('Checkout this JSON! ', out))
-  //   .catch(err => console.log(err));
+  fetch(url)
+    .then(res => res.json())
+    .then(out =>
+      console.log('Checkout this JSON! ', out))
+    .catch(err => console.log(err));
 }
 
 // 浏览器是否支持直接读写文件
@@ -1079,10 +1114,18 @@ div#md-content h1 {
 }
 
 .v-theme--light {
-  --v-theme-timeline: 240, 240, 240;
+  --v-theme-timeline: 230, 230, 230;
 }
 
 .v-theme--dark {
-  --v-theme-timeline: 60, 60, 60;
+  --v-theme-timeline: 34, 34, 34;
+}
+
+.md-editor-dark {
+  --md-bk-color: #222;
+}
+
+.md-editor-content{
+  font-size: 2em;
 }
 </style>

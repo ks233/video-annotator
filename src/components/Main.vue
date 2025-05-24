@@ -193,7 +193,7 @@ import { marked } from 'marked';
 import { useTheme } from 'vuetify'
 
 
-const debugMode = ref(false)
+const debugMode = ref(true)
 
 const videoFileName = ref('SampleVideo')
 
@@ -225,7 +225,7 @@ function toggleTheme() {
 
 watch(selectedNote, (note) => {
   if (note != null) {
-    mdContent.value = marked.parse(note.text)
+    mdContent.value = marked.parse(embedImage(note.text))
   }
 }, {
   deep: true
@@ -392,6 +392,9 @@ onUnmounted(() => {
   document.removeEventListener('mouseup', globalMouseUp);
 })
 
+/**
+ * @param {MouseEvent} event
+ */
 function globalMouseMove(event) {
   if (draggingTimeline.value) {
     dragTimeline(event)
@@ -404,6 +407,9 @@ function globalMouseMove(event) {
   }
 }
 
+/**
+ * @param {MouseEvent} event
+ */
 function globalMouseUp(event) {
   if (draggingTimeline.value) {
     finishDragTimeline(event)
@@ -413,6 +419,9 @@ function globalMouseUp(event) {
   }
 }
 
+/**
+ * @param {KeyboardEvent} event
+ */
 function preventHotkeys(event) {
   if (event.ctrlKey && (event.key === 'z' || event.key === 's')) {
     if (notUsingInput.value) {
@@ -423,6 +432,9 @@ function preventHotkeys(event) {
 
 const noteFileHandle = ref(null)
 
+/**
+ * @param {DragEvent} event
+ */
 async function dropFile(event) {
   const items = event.dataTransfer.items;
   Array.from(event.dataTransfer.files).forEach(file => {
@@ -446,6 +458,10 @@ async function dropFile(event) {
   }
 }
 
+/**
+ *
+ * @param {Event} event
+ */
 function prevent(event) {
   event.preventDefault()
 }
@@ -569,12 +585,15 @@ let moveCmd = {
   redo: () => { }
 }
 
-function clearCommandStack(){
-    commandStack = []
-    commandStackPointer = -1
+function clearCommandStack() {
+  commandStack = []
+  commandStackPointer = -1
 }
 
-// 注册指令添加到栈中
+/**
+ * 注册指令添加到栈中
+ * @param {Note} note
+ */
 function startRegisterMove(note) {
   let time = note.time
   let id = note.id
@@ -584,6 +603,10 @@ function startRegisterMove(note) {
   }
 }
 
+/**
+ * 注册指令添加到栈中
+ * @param {Note} note
+ */
 function finishRegisterMove(note) {
   let time = note.time
   let id = note.id
@@ -630,12 +653,17 @@ function redo() {
   console.log(commandStack, commandStackPointer)
 }
 
-// 根据 id 找到要操作的元素，避免 add delete 之后丢失引用
-
+/**
+ * 根据 id 找到要操作的元素，避免 add delete 之后丢失引用
+ * @param {String} id
+ */
 function findNoteByID(id) {
   return notes.value.find(note => note.id == id)
 }
 
+/**
+ * @param {String} id
+ */
 function deleteNoteByID(id) {
   let note = findNoteByID(id)
   if (note) {
@@ -643,7 +671,14 @@ function deleteNoteByID(id) {
   }
 }
 
+/**
+ * @param {String} id
+ * @param {Number} time
+ */
 function setNoteTimeByID(id, time) {
+  /**
+   * @type {Note}
+   */
   let note = findNoteByID(id)
   if (note) {
     note.time = time
@@ -670,24 +705,19 @@ function updateWindowSize() {
   windowWidth.value = window.innerWidth
 }
 
-const tsList = [0.2, 0.3, 0.5, 1, 2, 3, 4, 5, 10, 20, 30, 40, 50, 80, 150, 300]
-
-// 滚轮调整时间轴的横向缩放
-function onTimelineScroll(event) {
-
-  if (event.deltaY > 0) {
-    timeScale.value = tsList.findLast(ts => ts < timeScale.value) ?? tsList[0]
-  } else {
-    timeScale.value = tsList.find(ts => ts > timeScale.value) ?? tsList[tsList.length - 1]
-  }
-  // timeScale.value = timeScale.value.clamp(1, 300)
-  offsetX.value = timeToOffset(currentTime.value);
-}
-
 function debug() {
   console.log(notes.value)
   var audio = new Audio('metronome_down.wav');
   audio.play();
+  addImage('test', '=base64xxx=')
+  addImage('foo', 'werqreqwre')
+  console.log(embedImage(
+    `
+![](__test)
+test,test, h![](__foo)aswet
+wasdfasd
+    `
+  ))
 }
 
 // 【添加和删除笔记】
@@ -746,6 +776,11 @@ function deleteCurrentNote() {
   deleteNote(selectedNote.value, true)
 }
 
+/**
+ *
+ * @param {PointerEvent} event
+ * @param {Note} note
+ */
 function onTimestampClick(event, note) {
   if (event.clientX != startDragXts) {
     return;
@@ -759,6 +794,22 @@ function selectAndSeekNote(note) {
   seek(note.time)
 }
 
+
+// 滚轮调整时间轴的横向缩放
+
+const tsList = [0.2, 0.3, 0.5, 1, 2, 3, 4, 5, 10, 20, 30, 40, 50, 80, 150, 300]
+
+function onTimelineScroll(event) {
+
+  if (event.deltaY > 0) {
+    timeScale.value = tsList.findLast(ts => ts < timeScale.value) ?? tsList[0]
+  } else {
+    timeScale.value = tsList.find(ts => ts > timeScale.value) ?? tsList[tsList.length - 1]
+  }
+  // timeScale.value = timeScale.value.clamp(1, 300)
+  offsetX.value = timeToOffset(currentTime.value);
+}
+
 // 拖拽时间轴
 
 let prevX = 0
@@ -768,6 +819,9 @@ function startDragTimeline(event) {
   prevX = event.clientX
 }
 
+/**
+ * @param {MouseEvent} event
+ */
 function dragTimeline(event) {
   if (!draggingTimeline.value) return;
   let delta = prevX - event.clientX;
@@ -779,6 +833,9 @@ function dragTimeline(event) {
   currentTime.value = offsetToTime(offsetX.value)
 }
 
+/**
+ * @param {MouseEvent} event
+ */
 function finishDragTimeline(event) {
   if (!draggingTimeline.value) return;
   draggingTimeline.value = false
@@ -795,6 +852,11 @@ let prevXts = 0
 const draggedNote = ref(null);
 let startDragXts = 0
 
+/**
+ *
+ * @param {MouseEvent} event
+ * @param {Note} note
+ */
 function startDragTimestamp(event, note) {
   draggedNote.value = note
   draggingTimestamp.value = true
@@ -804,6 +866,10 @@ function startDragTimestamp(event, note) {
   startRegisterMove(note)
 }
 
+
+/**
+ * @param {MouseEvent} event
+ */
 function dragTimestamp(event) {
   if (!draggingTimestamp.value) return;
   let delta = prevXts - event.clientX;
@@ -815,6 +881,9 @@ function dragTimestamp(event) {
   draggedNote.value.time = offsetToTime(timestampOffsetX.value)
 }
 
+/**
+ * @param {MouseEvent} event
+ */
 function finishDragTimestamp(event) {
   if (!draggingTimestamp.value) return;
   draggingTimestamp.value = false
@@ -867,10 +936,19 @@ function selectNoteByCurrentTime() {
     }
   }
 }
-
+/**
+ * @param {Number} offset 时间轴的像素偏移量
+ * @returns {Number} 视频时间
+ */
 function offsetToTime(offset) {
   return (offset + windowWidth.value / 2) / timeScale.value
 }
+
+
+/**
+ * @param {Number} time 视频时间
+ * @returns {Number} 时间轴的像素偏移量
+ */
 function timeToOffset(time) {
   return -windowWidth.value / 2 + time * timeScale.value
 }
@@ -883,6 +961,9 @@ function updateTime() {
   selectNoteByCurrentTime()
 }
 
+/**
+ * @param {Boolean} firstBeat 是否为第一拍
+ */
 function playMetronome(firstBeat) {
   var audio = new Audio(firstBeat ? 'metronome_up.wav' : 'metronome_down.wav');
   audio.play();
@@ -896,6 +977,10 @@ function play() {
   }
 }
 
+/**
+ * 设置当前视频时间，并更新节拍器的时间偏移
+ * @param {Number} time 目标时间
+ */
 function seek(time) {
   player.value.currentTime(time.clamp(0, videoLength.value));
   metronomeStart.value = Date.now() - time * 1000
@@ -905,6 +990,31 @@ const timeScale = ref(100)
 
 const notes = ref([])
 
+// 【图床】
+const imageDatabase = ref({"1":"1"})
+
+/**
+ * @param {String} name
+ * @param {String} base64 Base64
+ */
+function addImage(name, base64) {
+  imageDatabase.value[name] = base64
+}
+
+// 匹配形如 ![](__xxx) 中的 xxx
+const imageRegex = /\[\]\(__([^)]+)\)/gm
+/**
+ * 将 ![](__name) 替换为 ![](base64)
+ * 正则搞不懂，找 GPT 写了，能跑就行
+ * @param {String} str
+ */
+function embedImage(str) {
+  return str.replace(imageRegex, (match, name) => {
+    return imageDatabase.value.hasOwnProperty(name) ? `[](${imageDatabase.value[name]})` : match;
+  })
+}
+
+// 【Util】
 
 function firstLine(str) {
   return str.split("\n")[0];
@@ -917,6 +1027,9 @@ function removeTitle(str) {
   return str
 }
 
+/**
+ * @param {Number} num
+ */
 function toHHMMSS(num) {
   var sec_num = parseInt(num, 10);
   var hours = Math.floor(sec_num / 3600);
@@ -931,6 +1044,9 @@ function toHHMMSS(num) {
 
 // 【文件的读取和保存】
 
+/**
+ * @param {File} file
+ */
 function loadFile(file) {
   var URL = window.URL || window.webkitURL
   var fileURL = URL.createObjectURL(file)
@@ -967,6 +1083,9 @@ async function saveNoteJSON() {
   }
 }
 
+/**
+ * @param {File} file
+ */
 function loadNoteJSON(file) {
   var reader = new FileReader();
   reader.onload = event => {
@@ -979,6 +1098,10 @@ function loadNoteJSON(file) {
   reader.readAsText(file);
 }
 
+/**
+ *
+ * @param {String} url
+ */
 function loadYoutubeVideo(url) {
   player.value.src({ type: 'video/youtube', src: url })
   player.value.controls(false)
@@ -1021,7 +1144,18 @@ Number.prototype.clamp = function (min, max) {
   return Math.min(Math.max(this, min), max);
 };
 
+/**
+ *
+ */
 class Note {
+  /**
+   * @type {String}
+   */
+  id;
+  /**
+   * @param {Number} time
+   * @param {String} text
+   */
   constructor(time, text) {
     this.id = nanoid()
     this.time = time
@@ -1054,7 +1188,8 @@ function makeSaveData() {
       beat: tlMarkerBeat.value,
       offset: tlMarkerOffset.value
     },
-    notes: notes.value
+    notes: notes.value,
+    imageDatabase: imageDatabase.value
   }
   return saveData
 }
@@ -1063,6 +1198,7 @@ function loadSaveData(saveData) {
   tlMarkerBPM.value = saveData.markers.bpm
   tlMarkerBeat.value = saveData.markers.beat
   tlMarkerOffset.value = saveData.markers.offset
+  imageDatabase.value = saveData.imageDatabase ?? {}
 
   saveData.notes.forEach(note => Object.setPrototypeOf(note, Note.prototype))
   notes.value = saveData.notes
@@ -1125,7 +1261,7 @@ div#md-content h1 {
   --md-bk-color: #222;
 }
 
-.md-editor-content{
+.md-editor-content {
   font-size: 2em;
 }
 </style>

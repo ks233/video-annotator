@@ -15,7 +15,7 @@
         <v-col>
           <v-sheet class="d-flex" height="70vh" :elevation="2">
             <video ref="videoPlayer" id="my-player" class="video-js"></video>
-            <div class="md-display pa-10" v-if="!showVideo" v-html="mdContent"></div>
+            <div class="md-display pa-10" v-if="!showVideo || videoInfo == null" v-html="mdContent"></div>
           </v-sheet>
         </v-col>
         <!-- Markdown 笔记框 -->
@@ -31,11 +31,14 @@
       <!-- 显示当前时间 -->
       <v-row class="mt-1">
         <v-col class="pt-0 pl-7">
-          <template v-if="videoSrc != ''">
-            <a :href="videoSrc"> {{ videoFileName }}</a>
-          </template>
+          <template v-if="videoInfo == null">No Video</template>
           <template v-else>
-            {{ videoFileName }}
+            <template v-if="videoInfo.src != ''">
+              <a :href="videoInfo.src"> {{ videoInfo.filename }}</a>
+            </template>
+            <template v-else>
+              {{ videoInfo.filename }}
+            </template>
           </template>
         </v-col>
         <v-col class="pt-0 font-size-large time-text">
@@ -47,11 +50,11 @@
               ✅ RW: "{{ noteFileHandle.name }}"
             </template>
             <template v-else>
-              ℹ️ DL: "{{ videoFileName }}.txt"
+              ℹ️ DL: "{{ videoInfo == null ? 'Note' : videoInfo.filename }}.txt"
             </template>
           </template>
           <template v-else>
-            ℹ️ DL: "{{ videoFileName }}.txt"。
+            ℹ️ DL: "{{ videoInfo == null ? 'Note' : videoInfo.filename }}.txt"。
           </template>
         </v-col>
       </v-row>
@@ -194,9 +197,9 @@ import { marked } from 'marked';
 import { useTheme } from 'vuetify'
 
 
-const debugMode = ref(true)
+const debugMode = ref(false)
 
-const videoFileName = ref('NoVideo')
+const videoFileName = ref('')
 const videoSrc = ref('')
 
 
@@ -204,8 +207,50 @@ const videoPlayer = ref(null)
 const player = ref(null)
 const drawer = ref(true)
 
+// 如果没有视频加载，则所有播放操作都与 player 无关，使用更新时间
+const videoLoaded = ref(false)
+
+class VideoInfo {
+  constructor(isLocal, src, duration) {
+    this.isLocal = isLocal
+    this.src = src
+    this.duration = duration
+  }
+  get filename() {
+    // 如果是本地文件，src 就是文件名
+    if (this.isLocal) return this.src;
+    // 如果是 URL，则分割字符串得到文件名
+    return this.src.split('/').pop()
+  }
+}
+
+const videoInfo = ref(null)
+
+const fakeVideoLength = ref(273)
+const fakeStartTime = ref(0)
+let fakeTimerId = null
+function playFake() {
+  fakeStartTime.value = Date.now() / 1000 - currentTime.value
+  isPlaying.value = true;
+  fakeTimerId = setInterval(fakeVideoTimer, 10);
+}
+function pauseFake() {
+  clearInterval(fakeTimerId);
+  isPlaying.value = false;
+}
+
+function fakeVideoTimer() {
+  if (draggingTimeline.value) return;
+  currentTime.value = Date.now() / 1000 - fakeStartTime.value
+  offsetX.value = timeToOffset(currentTime.value);
+  selectNoteByCurrentTime()
+}
+
 const currentTime = ref(0)
-const videoLength = ref(273)
+const videoLength = computed(() => {
+  console.log("compute")
+  return videoInfo.value == null ? fakeVideoLength.value : videoInfo.value.duration;
+})
 
 const videoTimeline = ref(null)
 const draggingTimeline = ref(false)
@@ -284,8 +329,13 @@ const offsetX = ref(0)
 const isPlaying = ref(false)
 
 const showVideo = ref(true)
+
+// 控制播放器隐藏和显示，感觉太啰嗦了，但没找到别的方法
 watch(showVideo, (v) => {
-  document.getElementById('my-player').style.setProperty('display', v ? "inline-block" : "none")
+  document.getElementById('my-player').style.setProperty('display', (v && videoInfo.value != null) ? "inline-block" : "none")
+})
+watch(videoInfo, (v) => {
+  document.getElementById('my-player').style.setProperty('display', (showVideo.value && v != null) ? "inline-block" : "none")
 })
 
 const useMetronome = ref(false)
@@ -320,10 +370,9 @@ onMounted(() => {
 
 
   player.value.on('timeupdate', () => {
-    updateTime()
+    onPlayerTimeUpdate()
   })
   player.value.on('pause', () => {
-    console.log(currentTime.value)
     isPlaying.value = false
   })
   player.value.on('play', () => {
@@ -359,7 +408,8 @@ onMounted(() => {
   var delta = 0
   var nextBeat = 0
   var nextBeatTime = 0
-  setInterval(function () {
+  // 一直在跑，不知道对性能有多大影响，目前好像不太卡
+  setInterval(() => {
     delta = (Date.now() - metronomeStart.value) / 1000 - tlMarkerOffset.value * (tlMarkerInterval.value / currentSpeed.value);
     nextBeat = Math.ceil(prevTime / (tlMarkerInterval.value / currentSpeed.value))
     nextBeatTime = nextBeat * (tlMarkerInterval.value / currentSpeed.value)
@@ -392,6 +442,7 @@ onMounted(() => {
   } else if (urlParamVideoSrc != null) {
     loadFromURL(urlParamVideoSrc)
   }
+  document.getElementById('my-player').style.setProperty('display', (showVideo.value == true && videoInfo.value != null) ? "inline-block" : "none")
 })
 
 onUnmounted(() => {
@@ -418,7 +469,6 @@ function globalMouseMove(event) {
   if (draggingTimestamp.value) {
     dragTimestamp(event)
     event.preventDefault()
-
   }
 }
 
@@ -879,6 +929,7 @@ function finishDragTimeline(event) {
   if (!draggingTimeline.value) return;
   draggingTimeline.value = false
   seek(offsetToTime(offsetX.value))
+  fakeStartTime.value = Date.now() / 1000 - currentTime.value
   selectNoteByCurrentTime()
 }
 
@@ -992,16 +1043,16 @@ function timeToOffset(time) {
   return -windowWidth.value / 2 + time * timeScale.value
 }
 
-function updateTime() {
+function onPlayerTimeUpdate() {
   if (draggingTimeline.value) return;
   currentTime.value = player.value.currentTime()
-  videoLength.value = player.value.duration()
+  videoInfo.value.duration = player.value.duration()
   offsetX.value = timeToOffset(currentTime.value);
   selectNoteByCurrentTime()
 }
 
 function updateMetronomeStart() {
-  metronomeStart.value = Date.now() - (player.value.currentTime() / currentSpeed.value) * 1000
+  metronomeStart.value = Date.now() - (currentTime.value / currentSpeed.value) * 1000
 }
 
 /**
@@ -1013,10 +1064,19 @@ function playMetronome(firstBeat) {
 }
 
 function play() {
-  if (player.value.paused()) {
-    player.value.play();
+  if (videoInfo.value) {
+
+    if (player.value.paused()) {
+      player.value.play();
+    } else {
+      player.value.pause();
+    }
   } else {
-    player.value.pause();
+    if (isPlaying.value) {
+      pauseFake()
+    } else {
+      playFake()
+    }
   }
 }
 
@@ -1025,7 +1085,9 @@ function play() {
  * @param {Number} time 目标时间
  */
 function seek(time) {
-  player.value.currentTime(time.clamp(0, videoLength.value));
+  if (videoInfo.value) {
+    player.value.currentTime(time.clamp(0, videoLength.value));
+  }
   updateMetronomeStart()
 }
 
@@ -1200,6 +1262,8 @@ function get_url_extension(url) {
  * @param {String} url
  */
 function loadYoutubeVideo(url) {
+  // 先设置 info，再设置 src，用播放器的 callback 设置 videoInfo.duration
+  videoInfo.value = new VideoInfo(false, url, 0)
   player.value.src({ type: 'video/youtube', src: url })
   player.value.controls(false)
 }
@@ -1209,6 +1273,7 @@ function loadYoutubeVideo(url) {
  * @param {String} url
  */
 function loadHtmlVideo(url) {
+  videoInfo.value = new VideoInfo(false, url, 0)
   player.value.src({ type: 'video/mp4', src: url })
   player.value.controls(true)
   seek(0)
@@ -1221,8 +1286,7 @@ function loadHtmlVideo(url) {
 function loadLocalVideo(file) {
   var URL = window.URL || window.webkitURL
   var fileURL = URL.createObjectURL(file)
-  videoFileName.value = file.name
-  videoSrc.value = ""
+  videoInfo.value = new VideoInfo(true, file.name, 0)
   player.value.controls(true)
   player.value.src({ type: file.type, src: fileURL })
   seek(0)
@@ -1243,12 +1307,8 @@ async function loadFromURL(url) {
   })
   if (type == V_YOUTUBE) {
     loadYoutubeVideo(url)
-    videoFileName.value = url.split('/').pop()
-    videoSrc.value = url
   } else if (type == V_HTML5) {
     loadHtmlVideo(url)
-    videoFileName.value = url.split('/').pop()
-    videoSrc.value = url
   }
 }
 
@@ -1332,7 +1392,7 @@ function makeSaveData() {
   const saveData = {
     showVideo: showVideo.value,
     editMode: editMode.value,
-    videoSrc: videoSrc.value,
+    videoInfo: videoInfo.value,
     markers: {
       bpm: tlMarkerBPM.value,
       beat: tlMarkerBeat.value,
@@ -1358,9 +1418,12 @@ function loadSaveData(saveData) {
   console.log(saveData.editMode)
   editMode.value = saveData.editMode ?? editMode.value
 
-  if (saveData.videoSrc !== "") {
-    loadFromURL(saveData.videoSrc)
-    videoSrc.value = saveData.videoSrc
+  videoInfo.value = saveData.videoInfo
+  Object.setPrototypeOf(videoInfo.value, VideoInfo.prototype)
+
+  if (saveData.videoInfo != null) {
+    if(!saveData.videoInfo.isLocal)
+    loadFromURL(saveData.videoInfo.src)
   }
 
   saveData.notes.forEach(note => Object.setPrototypeOf(note, Note.prototype))

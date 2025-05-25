@@ -54,7 +54,7 @@
             </template>
           </template>
           <template v-else>
-            ℹ️ DL: "{{ videoInfo == null ? 'Note' : videoInfo.filename }}.txt"。
+            🔷 DL: "{{ videoInfo == null ? 'Note' : videoInfo.filename }}.txt"。
           </template>
         </v-col>
       </v-row>
@@ -364,7 +364,7 @@ onMounted(() => {
     techOrder: ["html5", "youtube"],
     youtube: {
       ytControls: 2,
-      iv_load_policy: 3
+      iv_load_policy: 1
     }
   })
 
@@ -382,6 +382,7 @@ onMounted(() => {
   player.value.on('sourceset', () => {
     player.value.pause()
     isPlaying.value = false
+    videoInfo.value.duration = player.value.duration()
   })
   // 油管速度到三倍速的时候不会触发
   player.value.on('ratechange', () => {
@@ -510,15 +511,15 @@ async function dropFile(event) {
   });
   event.preventDefault()
   // 如果浏览器支持使用 FileSystemHandle，记录笔记文件的 handle，以便保存时直接保存到原文件中
+  // 按理来说不太旧的 Chrome 或者 Edge 应该都行
+  if(!supportFSHandle.value) return;
   for (const item of items) {
-    console.log(item)
+    console.log(item, typeof item.getAsFileSystemHandle)
     if (item.kind === 'file' && item.type == 'text/plain' && item.getAsFileSystemHandle) {
       const handle = await item.getAsFileSystemHandle();
       console.log(handle)
       if (handle.kind === 'file') {
         noteFileHandle.value = handle;
-        console.log(noteFileHandle.value)
-        // await handleFile(handle);
       } else {
         noteFileHandle.value = null
       }
@@ -1179,7 +1180,7 @@ async function saveNoteJSON() {
     await writable.write(json);
     await writable.close();
   } else {
-    download(json, videoFileName.value + '.txt', 'text/plain');
+    download(json, videoInfo.value.filename + '.txt', 'text/plain');
   }
 }
 
@@ -1409,7 +1410,6 @@ function loadSaveData(saveData) {
     console.log('invalid save data!')
     return
   }
-  reset()
   tlMarkerBPM.value = saveData.markers.bpm
   tlMarkerBeat.value = saveData.markers.beat
   tlMarkerOffset.value = saveData.markers.offset
@@ -1422,8 +1422,8 @@ function loadSaveData(saveData) {
   Object.setPrototypeOf(videoInfo.value, VideoInfo.prototype)
 
   if (saveData.videoInfo != null) {
-    if(!saveData.videoInfo.isLocal)
-    loadFromURL(saveData.videoInfo.src)
+    if (!saveData.videoInfo.isLocal)
+      loadFromURL(saveData.videoInfo.src)
   }
 
   saveData.notes.forEach(note => Object.setPrototypeOf(note, Note.prototype))

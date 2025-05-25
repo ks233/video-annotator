@@ -110,30 +110,22 @@
             <!-- 一堆按钮 -->
             <v-col :cols="6" class="d-flex align-center justify-center">
               <!-- 用 mousedown.prevent 阻止按钮在点击后获取焦点，否则按下空格时聚焦的按钮也会被触发 -->
-              <v-btn @mousedown.prevent @click="drawer = !drawer" class="mx-1" icon="mdi-list-box-outline"
-                size="x-large"></v-btn>
-              <v-btn @mousedown.prevent @click="showVideo = !showVideo" class="mx-1"
-                :icon="showVideo ? 'mdi-television-off' : 'mdi-television'" size="x-large"></v-btn>
-              <v-btn @mousedown.prevent @click="editMode = !editMode" class="mx-1"
-                :icon="editMode ? 'mdi-eye-outline' : 'mdi-pen'" size="x-large"></v-btn>
+              <round-btn @click="drawer = !drawer" icon="mdi-list-box-outline"></round-btn>
+              <round-btn @click="showVideo = !showVideo" :icon="showVideo ? 'mdi-television-off' : 'mdi-television'">
+              </round-btn>
+              <round-btn @click="editMode = !editMode" :icon="editMode ? 'mdi-eye-outline' : 'mdi-pen'">
+              </round-btn>
               <v-divider vertical class="mx-5"></v-divider>
-              <v-btn @mousedown.prevent @click="seekPreviousNote()" class="mx-1" icon="mdi-skip-backward-outline"
-                size="x-large"></v-btn>
-              <v-btn @mousedown.prevent @click="play()" class="mx-1"
-                :icon="isPlaying ? 'mdi-pause' : 'mdi-play-outline'" size="x-large"></v-btn>
-              <v-btn @mousedown.prevent @click="seekNextNote()" class="mx-1" icon="mdi-skip-forward-outline"
-                size="x-large"></v-btn>
+              <round-btn @click="seekPreviousNote()" icon="mdi-skip-backward-outline"></round-btn>
+              <round-btn @click="play()" :icon="isPlaying ? 'mdi-pause' : 'mdi-play-outline'"></round-btn>
+              <round-btn @click="seekNextNote()" icon="mdi-skip-forward-outline"></round-btn>
               <v-divider vertical class="mx-5"></v-divider>
-              <v-btn @mousedown.prevent @click="addDefaultNote()" class="mx-1" icon="mdi-text-box-plus-outline"
-                size="x-large"></v-btn>
-              <v-btn @mousedown.prevent @click="deleteCurrentNote()" class="mx-1" icon="mdi-delete-outline"
-                size="x-large"></v-btn>
-              <v-btn @mousedown.prevent @click="drawer = !drawer" class="mx-1" icon="mdi-image-multiple-outline"
-                size="x-large"></v-btn>
+              <round-btn @click="addDefaultNote()" icon="mdi-text-box-plus-outline"></round-btn>
+              <round-btn @click="deleteCurrentNote()" icon="mdi-delete-outline"></round-btn>
+              <round-btn @click="drawer = !drawer" icon="mdi-image-multiple-outline"></round-btn>
               <v-divider vertical class="mx-5"></v-divider>
-              <v-btn @mousedown.prevent @click="saveNoteJSON()" class="mx-1" icon="mdi-content-save-outline"
-                size="x-large"></v-btn>
-              <v-btn @mousedown.prevent @click="loadFromURL()" class="mx-1" icon="mdi-link-plus" size="x-large"></v-btn>
+              <round-btn @click="saveNoteJSON()" icon="mdi-content-save-outline"></round-btn>
+              <round-btn @click="loadFromURLPrompt()" icon="mdi-link-plus"></round-btn>
             </v-col>
             <v-col>
             </v-col>
@@ -144,9 +136,9 @@
         <v-col :cols="4">
           <v-row>
             <v-col :cols="3">
-              <v-btn @click="useMetronome = !useMetronome" class="mx-1" icon="mdi-metronome"
+              <v-btn @mousedown.prevent @click="useMetronome = !useMetronome" class="mx-1" icon="mdi-metronome"
                 :color="useMetronome ? 'blue-lighten-1' : '--v-theme-surface'"></v-btn>
-              <v-btn @click="snapToMarker = !snapToMarker" class="mx-1" icon="mdi-magnet"
+              <v-btn @mousedown.prevent @click="snapToMarker = !snapToMarker" class="mx-1" icon="mdi-magnet"
                 :color="snapToMarker ? 'pink-lighten-1' : '--v-theme-surface'"></v-btn>
             </v-col>
             <v-col :cols="8" class="mt-5">
@@ -170,7 +162,6 @@
         {{ offsetX }} / {{ windowWidth }} / {{ tlMarkerDensity }} / {{ tlBigMarkerDensity }} / {{ tlBigMarkerCull }}<br>
         timescale: {{ timeScale }} / showVideo {{ showVideo }} {{ mdContent }}<br>
         timelineMarkerCount: {{ tlMarkerCount }} bpm {{ tlMarkerBPM }} offset {{ tlMarkerOffset }}
-
       </v-row>
 
       <v-btn @mousedown.prevent @click="toggleTheme()" id="toggle-theme" class="mx-1" prepend-icon="mdi-brightness-6"
@@ -330,8 +321,9 @@ onMounted(() => {
   })
   player.value.on('play', () => {
     isPlaying.value = true
-    metronomeStart.value = Date.now() - player.value.currentTime() * 1000
+    updateMetronomeStart()
   })
+  // 油管速度到三倍速的时候不会触发
   player.value.on('ratechange', () => {
     currentSpeedIndex.value = speedList.findIndex(n => n == player.value.playbackRate())
   })
@@ -357,9 +349,9 @@ onMounted(() => {
   var nextBeat = 0
   var nextBeatTime = 0
   setInterval(function () {
-    delta = (Date.now() - metronomeStart.value) / 1000 - tlMarkerOffset.value * tlMarkerInterval.value;
-    nextBeat = Math.ceil(prevTime / tlMarkerInterval.value)
-    nextBeatTime = nextBeat * tlMarkerInterval.value
+    delta = (Date.now() - metronomeStart.value) / 1000 - tlMarkerOffset.value * (tlMarkerInterval.value / currentSpeed.value);
+    nextBeat = Math.ceil(prevTime / (tlMarkerInterval.value / currentSpeed.value))
+    nextBeatTime = nextBeat * (tlMarkerInterval.value / currentSpeed.value)
     if (delta > nextBeatTime) {
       if (useMetronome.value && isPlaying.value) {
         playMetronome(nextBeat % tlMarkerBeat.value == 0)
@@ -382,6 +374,8 @@ onMounted(() => {
   }
 
   offsetX.value = timeToOffset(currentTime.value)
+
+  console.log(urlParamNoteSrc, urlParamVideoSrc)
 })
 
 onUnmounted(() => {
@@ -478,6 +472,7 @@ function prevent(event) {
 // 全局快捷键
 import { useActiveElement, useMagicKeys, whenever } from '@vueuse/core'
 import { logicAnd } from '@vueuse/math'
+import RoundBtn from './RoundBtn.vue';
 
 // 编辑文本框时不触发全局快捷键
 const activeElement = useActiveElement()
@@ -498,7 +493,10 @@ whenever(keyCtrlS, (v) => {
   saveNoteJSON();
 })
 
-
+// 读取链接的 query string 比如 xxx.com/?n=xxx.txt&v=xxx.mp4
+const urlParams = new URLSearchParams(window.location.search);
+const urlParamNoteSrc = urlParams.get('n');
+const urlParamVideoSrc = urlParams.get('v');
 
 // 【播放速度控制】
 
@@ -506,6 +504,12 @@ const speedList = [0.5, 0.75, 1, 1.5, 2, 3]
 const defaultSpeedIndex = 2
 const currentSpeedIndex = ref(2)
 const storedSpeedIndex = ref(4)
+
+const currentSpeed = computed(() => speedList[currentSpeedIndex.value])
+
+watch(currentSpeed, (v) => {
+  updateMetronomeStart()
+})
 
 // Z X C 变速，和 PotPlayer 类似
 // Ctrl-Z 撤销，Ctrl-Shift-Z 重做
@@ -562,7 +566,6 @@ const keyF = keys['f']
 whenever(logicAnd(keyD, notUsingInput), (v) => {
   if (!player.value.paused()) return; // 只在视频暂停的时候启用该功能
   seek(currentTime.value - 0.04) // 随便写个很短的时间假装逐帧调整
-  metronomeStart.value = Date.now() - player.value.currentTime() * 1000
 })
 
 whenever(logicAnd(keyF, notUsingInput), (v) => {
@@ -727,7 +730,7 @@ function updateWindowSize() {
   windowWidth.value = window.innerWidth
 }
 
-function debug() {
+async function debug() {
   console.log(notes.value)
   addImage('test', '=base64xxx=')
   addImage('foo', 'werqreqwre')
@@ -981,6 +984,11 @@ function updateTime() {
   selectNoteByCurrentTime()
 }
 
+function updateMetronomeStart() {
+  console.log("pud", currentSpeed.value)
+  metronomeStart.value = Date.now() - (player.value.currentTime() / currentSpeed.value) * 1000
+}
+
 /**
  * @param {Boolean} firstBeat 是否为第一拍
  */
@@ -1003,7 +1011,7 @@ function play() {
  */
 function seek(time) {
   player.value.currentTime(time.clamp(0, videoLength.value));
-  metronomeStart.value = Date.now() - time * 1000
+  updateMetronomeStart()
 }
 
 const timeScale = ref(100)
@@ -1118,6 +1126,69 @@ function loadNoteJSON(file) {
   reader.readAsText(file);
 }
 
+// 链接的类型，V = Video，N = Note
+const V_HTML5 = 0
+const V_YOUTUBE = 1
+const V_FAKE = 2
+const N_JSON = 10
+const INVALID_URL = -1
+
+/**
+ *
+ * @param {String} url
+ * @param {function(Object):void} jsonCallback
+ */
+async function getUrlType(url, jsonCallback) {
+  console.log('================')
+  let ext = get_url_extension(url)
+  console.log(url)
+  console.log('ext', ext)
+  // 用简单的字符串匹配视频类型
+  if (url.startsWith("https://www.youtube.com/" || "www.youtube.com/" || "youtube.com/")) {
+    console.log('youtube')
+    return V_YOUTUBE;
+  }
+
+  if (['mp4', 'mov', 'webm'].includes(ext)) {
+    return V_HTML5
+  }
+
+  if (['mp3', 'wav'].includes(ext)) {
+    return V_HTML5
+  }
+
+  // 尝试请求并 parse json，如果成功则类型为 json
+  try {
+    console.log("wtf")
+    const response = await fetch(url);
+    // 如果请求失败，直接 invalid
+    if (!response.ok) {
+      console.log(`Response status: ${response.status}`);
+      return INVALID_URL
+    }
+    let text = await response.text()
+    console.log(text)
+    try {
+      const obj = JSON.parse(text);
+      jsonCallback(obj)
+      return N_JSON
+    } catch (error) {
+    }
+  } catch (error) {
+    console.log(error)
+    return INVALID_URL
+  }
+
+  return INVALID_URL;
+}
+
+// 来源：https://stackoverflow.com/questions/6997262/how-to-pull-url-file-extension-out-of-url-string-using-javascript
+// 如果输入 https://www.youtube.com/watch?v=XXX 它会输出 com/watch
+// 暂时够用，但感觉不是很靠谱
+function get_url_extension(url) {
+  return url.split(/[#?]/)[0].split('.').pop().trim();
+}
+
 /**
  *
  * @param {String} url
@@ -1127,17 +1198,34 @@ function loadYoutubeVideo(url) {
   player.value.controls(false)
 }
 
-function loadFromURL() {
-  let url = prompt('url', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ')
-  if (url) {
-    loadYoutubeVideo(url)
-  }
+/**
+ *
+ * @param {String} url
+ */
+function loadHtmlVideo(url) {
+  player.value.src({ type: 'video/mp4', src: url })
+  player.value.controls(true)
+}
 
-  fetch(url)
-    .then(res => res.json())
-    .then(out =>
-      console.log('Checkout this JSON! ', out))
-    .catch(err => console.log(err));
+async function loadFromURLPrompt() {
+  let url = prompt('url', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+  const type = await getUrlType(url, (obj) => { loadSaveData(obj) })
+  if (type == V_YOUTUBE) {
+    loadYoutubeVideo(url)
+  } else if (type == V_HTML5) {
+    loadHtmlVideo(url)
+  }
+}
+
+async function loadFromURL(url) {
+  const type = await getUrlType(url, (obj) => { loadSaveData(obj) })
+  if (type == V_YOUTUBE) {
+    loadYoutubeVideo(url)
+    videoFileName.value = url.split('/').pop()
+  } else if (type == V_HTML5) {
+    loadHtmlVideo(url)
+    videoFileName.value = url.split('/').pop()
+  }
 }
 
 // 浏览器是否支持直接读写文件
@@ -1203,6 +1291,9 @@ class Note {
 
 function makeSaveData() {
   const saveData = {
+    showVideo: showVideo.value,
+    editMode: editMode.value,
+    videoSrc: "",
     markers: {
       bpm: tlMarkerBPM.value,
       beat: tlMarkerBeat.value,
@@ -1215,10 +1306,22 @@ function makeSaveData() {
 }
 
 function loadSaveData(saveData) {
+  if (saveData.notes === undefined) {
+    console.log('invalid save data!')
+    return
+  }
   tlMarkerBPM.value = saveData.markers.bpm
   tlMarkerBeat.value = saveData.markers.beat
   tlMarkerOffset.value = saveData.markers.offset
-  imageDatabase.value = saveData.imageDatabase ?? {}
+  imageDatabase.value = saveData.imageDatabase ?? imageDatabase.value
+  showVideo.value = saveData.showVideo ?? showVideo.value
+  console.log(saveData.editMode)
+  editMode.value = saveData.editMode ?? editMode.value
+
+  console.log("videoSrc")
+  if (saveData.videoSrc !== "") {
+    loadFromURL(saveData.videoSrc)
+  }
 
   saveData.notes.forEach(note => Object.setPrototypeOf(note, Note.prototype))
   notes.value = saveData.notes
@@ -1296,6 +1399,8 @@ div#md-content h1 {
   bottom: 10px;
 }
 </style>
+
+<!-- 没有 scoped 才能影响 Marked 渲染生成的内容 -->
 <style>
 .md-display img {
   max-width: 100%;

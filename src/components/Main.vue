@@ -16,7 +16,7 @@
           <v-sheet class="d-flex" height="70vh" :elevation="2" style="position: relative">
             <!-- 叠在视频上方的绘图层 -->
             <div id="drawing-layer" v-show="showVideo && videoInfo != null" ref="drawingLayer" class="no-select-text"
-            :class="keyCtrl ? 'drawing' : ''">
+              :class="keyCtrl ? 'drawing' : ''">
               <svg width="100%" height="100%" style="justify-content: center;" @mousedown="startDrawing"
                 @mousemove="drawing" @mouseup="endDrawing" @click.right.prevent>
 
@@ -142,7 +142,7 @@
               <v-divider vertical class="mx-5"></v-divider>
               <round-btn @click="addDefaultNote()" icon="mdi-text-box-plus-outline"></round-btn>
               <round-btn @click="deleteCurrentNote()" icon="mdi-delete-outline"></round-btn>
-              <round-btn @click="drawer = !drawer" icon="mdi-image-multiple-outline"></round-btn>
+              <round-btn @click="imageDatabaseDialog = true" icon="mdi-image-multiple-outline"></round-btn>
               <v-divider vertical class="mx-5"></v-divider>
               <round-btn @click="saveNoteJSON()" icon="mdi-content-save-outline"></round-btn>
               <round-btn @click="loadFromURLPrompt()" icon="mdi-link-plus"></round-btn>
@@ -176,6 +176,31 @@
           </v-row>
         </v-col>
       </v-row>
+
+      <!-- 图床窗口 -->
+      <v-dialog v-model="imageDatabaseDialog" width="auto">
+        <v-card width="40vw" max-height="60vh" min-height="30vh" prepend-icon="mdi-update" text="Ctrl-V to add image."
+          title="Image Database">
+          <v-row class="pa-5">
+            <v-col v-for="(base64, name) in imageDatabase" :key="key"
+              class="d-flex child-flex flex-column text-center py-1 px-2" cols="4">
+              <v-img :src="base64" aspect-ratio="1.5" class="bg-grey-lighten-2" cover @click="insertImage(name)">
+                <template v-slot:placeholder>
+                  <v-row align="center" class="fill-height ma-0" justify="center">
+                    <v-progress-circular color="grey-lighten-5" indeterminate></v-progress-circular>
+                  </v-row>
+                </template>
+              </v-img>
+              <p @click="renameImage(name)">{{ name }}</p>
+              <v-btn @click="deleteImage(name)">Delete</v-btn>
+            </v-col>
+          </v-row>
+          <template v-slot:actions>
+            <v-btn class="ms-auto" text="Ok" @click="imageDatabaseDialog = false"></v-btn>
+          </template>
+        </v-card>
+      </v-dialog>
+
       <!-- 一些 debug 用的信息 -->
       <v-row v-if="debugMode" class="px-6">
         <v-btn @click="debug()">debug</v-btn>
@@ -390,6 +415,10 @@ onMounted(() => {
   player.value.on('pause', () => {
     isPlaying.value = false
   })
+  player.value.on('resize', () => {
+    videoInfo.value.width = player.value.videoWidth()
+    videoInfo.value.height = player.value.videoHeight()
+  })
   player.value.on('play', () => {
     isPlaying.value = true
     updateMetronomeStart()
@@ -418,7 +447,7 @@ onMounted(() => {
   // 拖拽时间轴和时间戳，只有 mousedown 不是全局
   document.addEventListener('mousemove', globalMouseMove);
   document.addEventListener('mouseup', globalMouseUp);
-
+  document.addEventListener('paste', pasteImage);
   // 节拍器设置
   var prevTime = 0
   var delta = 0
@@ -502,8 +531,7 @@ class Polyline {
    * @param ah 绘制时的容器高度
    */
   constructor() {
-    // 当前容器高度，和播放器的高度一致
-    // 注意这个不是视频的宽高，而是播放器的宽高
+    // 当前容器大小
     this.w = layerSize.value.width
     this.h = layerSize.value.height
     // console.log(this.sw, this.sh)
@@ -513,15 +541,14 @@ class Polyline {
     this.points.push([x, y])
   }
 
-  // 由当前容器高度，计算变换后的点坐标，输出为字符串
+  // 由当前容器大小，计算变换后的点坐标，输出为字符串
   get polyString() {
-    // 当前容器高度，和播放器的高度一致
     let w = layerSize.value.width
     let h = layerSize.value.height
     let str = ''
     let aRatio = this.w / this.h
     let bRatio = w / h
-    let vRatio = 16 / 9
+    let vRatio = videoInfo.value.width / videoInfo.value.height
     let ba = 0
     if (aRatio > vRatio && bRatio > vRatio) { // AB 都扁，比容器高度
       ba = h / this.h
@@ -535,7 +562,6 @@ class Polyline {
     for (const point of this.points) {
       let x = point[0] - this.w * 0.5
       let y = point[1] - this.h * 0.5
-      // 如果容器比视频窄，则缩放高度
       x *= ba
       y *= ba
       x += w * 0.5
@@ -663,6 +689,7 @@ const notUsingInput = computed(() =>
   // Markdown 编辑器（md-editor-v3）的输入框有 spellcheck 的属性，其它没有
   // 如果之后其它元素也有 spellcheck，可能导致快捷键失效
   && !activeElement.value?.hasAttribute("spellcheck")
+  && !imageDatabaseDialog.value
 )
 
 const keys = useMagicKeys()
@@ -1184,7 +1211,6 @@ function playMetronome(firstBeat) {
 
 function play() {
   if (videoInfo.value) {
-
     if (player.value.paused()) {
       player.value.play();
     } else {
@@ -1195,6 +1221,7 @@ function play() {
       pauseFake()
     } else {
       playFake()
+      updateMetronomeStart()
     }
   }
 }
@@ -1215,7 +1242,17 @@ const timeScale = ref(100)
 const notes = ref([])
 
 // 【图床】
-const imageDatabase = ref({ "1": "1" })
+
+const imageDatabaseDialog = ref(false)
+const imageDatabase = ref({})
+
+watch(imageDatabase, () => {
+  if (selectedNote.value != null) {
+    mdContent.value = marked.parse(embedImage(selectedNote.value.text))
+  }
+}, {
+  deep: true
+})
 
 /**
  * @param {String} name
@@ -1237,6 +1274,67 @@ function embedImage(str) {
     return imageDatabase.value.hasOwnProperty(name) ? `[](${imageDatabase.value[name]})` : match;
   })
 }
+
+function pasteImage(event) {
+  if (imageDatabaseDialog.value == false) return
+  console.log('paste')
+  const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+  for (let index in items) {
+    const item = items[index];
+    if (item.kind === 'file' && item.type.startsWith('image/')) {
+      const blob = item.getAsFile();
+      const reader = new FileReader();
+      reader.onload = function (event) {
+        const base64String = event.target.result;
+        // Use the base64String (e.g., set it as the src of an image)
+        console.log(base64String);
+        imageDatabase.value[nanoid()] = base64String
+        console.log(imageDatabase.value)
+      };
+      reader.readAsDataURL(blob);
+      return;
+    }
+  }
+}
+
+function deleteImage(name){
+  delete imageDatabase.value[name]
+}
+
+function renameImage(name){
+  let newName = prompt('Rename Image:', name)
+  if(newName){
+    if(newName != name){
+      if(!imageDatabase.value.hasOwnProperty(newName)){
+        imageDatabase.value[newName] = imageDatabase.value[name]
+        deleteImage(name)
+      }
+    }
+  }
+}
+
+function insertImage(name){
+  myMdEditor.value.insert((selectedText) => {
+  /**
+   * @return targetValue    待插入内容
+   * @return select         插入后是否自动选中内容，默认：true
+   * @return deviationStart 插入后选中内容鼠标开始位置，默认：0
+   * @return deviationEnd   插入后选中内容鼠标结束位置，默认：0
+   */
+  return {
+    targetValue: `![](__${name})`,
+    select: false,
+    deviationStart: 0,
+    deviationEnd: 0,
+  };
+});
+}
+
+// const keyCtrlV = keys['ctrl+v']
+
+// whenever(logicAnd(keyCtrlV, imageDatabaseDialog), (v) => {
+//   console.log('paste')
+// })
 
 // 【Util】
 

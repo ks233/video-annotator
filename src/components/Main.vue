@@ -13,7 +13,19 @@
       <v-row class="px-4 justify-center pt-3">
         <!-- 视频 -->
         <v-col>
-          <v-sheet class="d-flex" height="70vh" :elevation="2">
+          <v-sheet class="d-flex" height="70vh" :elevation="2" style="position: relative">
+            <!-- 叠在视频上方的绘图层 -->
+            <div id="drawing-layer" v-show="showVideo && videoInfo != null" ref="drawingLayer" class="no-select-text"
+            :class="keyCtrl ? 'drawing' : ''">
+              <svg width="100%" height="100%" style="justify-content: center;" @mousedown="startDrawing"
+                @mousemove="drawing" @mouseup="endDrawing" @click.right.prevent>
+
+                <polyline :points="polyline ? polyline.polyString : ''"
+                  style="fill:none;stroke:white;stroke-width:8;fill-rule:evenodd;" />
+                <polyline :points="polyline ? polyline.polyString : ''"
+                  style="fill:none;stroke:red;stroke-width:3;fill-rule:evenodd;" />
+              </svg>
+            </div>
             <video ref="videoPlayer" id="my-player" class="video-js"></video>
             <div class="md-display pa-10" v-if="!showVideo || videoInfo == null" v-html="mdContent"></div>
           </v-sheet>
@@ -111,7 +123,7 @@
         </div>
       </v-row>
       <v-row class="justify-center mt-5" justify="center">
-        <v-col :cols="8">
+        <v-col :cols="9">
           <v-row>
             <v-col :cols="3">
             </v-col>
@@ -141,10 +153,10 @@
         </v-col>
 
         <!-- BPM 与偏移量调整 -->
-        <v-col :cols="4">
+        <v-col :cols="3">
           <v-row>
-            <v-col :cols="3">
-              <v-btn @mousedown.prevent @click="useMetronome = !useMetronome" class="mx-1" icon="mdi-metronome"
+            <v-col :cols="2" class="d-flex flex-column align-end">
+              <v-btn @mousedown.prevent @click="useMetronome = !useMetronome" class="mx-1 my-2" icon="mdi-metronome"
                 :color="useMetronome ? 'blue-lighten-1' : '--v-theme-surface'"></v-btn>
               <v-btn @mousedown.prevent @click="snapToMarker = !snapToMarker" class="mx-1" icon="mdi-magnet"
                 :color="snapToMarker ? 'pink-lighten-1' : '--v-theme-surface'"></v-btn>
@@ -167,9 +179,9 @@
       <!-- 一些 debug 用的信息 -->
       <v-row v-if="debugMode" class="px-6">
         <v-btn @click="debug()">debug</v-btn>
-        {{ offsetX }} / {{ windowWidth }} / {{ tlMarkerDensity }} / {{ tlBigMarkerDensity }} / {{ tlBigMarkerCull }}<br>
+        <!-- {{ offsetX }} / {{ windowWidth }} / {{ tlMarkerDensity }} / {{ tlBigMarkerDensity }} / {{ tlBigMarkerCull }}<br>
         timescale: {{ timeScale }} / showVideo {{ showVideo }} {{ mdContent }}<br>
-        timelineMarkerCount: {{ tlMarkerCount }} bpm {{ tlMarkerBPM }} offset {{ tlMarkerOffset }}
+        timelineMarkerCount: {{ tlMarkerCount }} bpm {{ tlMarkerBPM }} offset {{ tlMarkerOffset }} -->
       </v-row>
 
       <v-btn @mousedown.prevent @click="toggleTheme()" id="toggle-theme" class="mx-1" prepend-icon="mdi-brightness-6"
@@ -196,8 +208,9 @@ import { marked } from 'marked';
 
 import { useTheme } from 'vuetify'
 
+import RoundBtn from './RoundBtn.vue';
 
-const debugMode = ref(false)
+const debugMode = ref(true)
 
 const videoFileName = ref('')
 const videoSrc = ref('')
@@ -215,6 +228,8 @@ class VideoInfo {
     this.isLocal = isLocal
     this.src = src
     this.duration = duration
+    this.height = 1080
+    this.width = 1920
   }
   get filename() {
     // 如果是本地文件，src 就是文件名
@@ -459,6 +474,106 @@ onUnmounted(() => {
   document.removeEventListener('mouseup', globalMouseUp);
 })
 
+// 【绘图层】
+
+import { useElementSize } from '@vueuse/core';
+const drawingLayer = ref(null)
+
+const testCircleX = ref('0')
+const testCircleY = ref('0')
+const isDrawing = ref(false)
+
+let counter = 0
+const polyline = ref(null)
+
+const layerSize = ref(
+  useElementSize(
+    drawingLayer,
+    { width: 0, height: 0 },
+    { box: 'border-box' },
+  ),
+)
+
+const drawMode = ref(false)
+
+class Polyline {
+  /**
+   * @param aw 绘制时的容器宽度，用来在容器大小变化时计算坐标
+   * @param ah 绘制时的容器高度
+   */
+  constructor() {
+    // 当前容器高度，和播放器的高度一致
+    // 注意这个不是视频的宽高，而是播放器的宽高
+    this.w = layerSize.value.width
+    this.h = layerSize.value.height
+    // console.log(this.sw, this.sh)
+    this.points = []
+  }
+  addPoint(x, y) {
+    this.points.push([x, y])
+  }
+
+  // 由当前容器高度，计算变换后的点坐标，输出为字符串
+  get polyString() {
+    // 当前容器高度，和播放器的高度一致
+    let w = layerSize.value.width
+    let h = layerSize.value.height
+    let str = ''
+    let aRatio = this.w / this.h
+    let bRatio = w / h
+    let vRatio = 16 / 9
+    let ba = 0
+    if (aRatio > vRatio && bRatio > vRatio) { // AB 都扁，比容器高度
+      ba = h / this.h
+    } else if (aRatio < vRatio && bRatio < vRatio) { // AB 都窄，比容器宽度
+      ba = w / this.w
+    } else if (aRatio > vRatio && bRatio < vRatio) { // A 扁 B 窄，用 B 的容器宽度比 A 的视频宽度
+      ba = w / (this.h * vRatio)
+    } else if (aRatio < vRatio && bRatio > vRatio) { // A 窄 B 扁，用 B 的容器高度比 A 的视频高度
+      ba = h / (this.w / vRatio)
+    }
+    for (const point of this.points) {
+      let x = point[0] - this.w * 0.5
+      let y = point[1] - this.h * 0.5
+      // 如果容器比视频窄，则缩放高度
+      x *= ba
+      y *= ba
+      x += w * 0.5
+      y += h * 0.5
+      str += x + ',' + y + ' '
+    }
+    return str
+  }
+}
+
+/**
+ *
+ * @param {MouseEvent} event
+ */
+function startDrawing(event) {
+  isDrawing.value = true
+  polyline.value = new Polyline()
+  console.log('start drawing', event)
+  counter = 0
+}
+
+function drawing(event) {
+  if (!isDrawing.value) return;
+  counter++;
+  if (counter % 2 != 0) return;
+  console.log('drawing')
+  testCircleX.value = event.offsetX / event.target.clientWidth * 100 + '%'
+  testCircleY.value = event.offsetY / event.target.clientHeight * 100 + '%'
+
+  polyline.value.addPoint(event.offsetX, event.offsetY)
+}
+function endDrawing(event) {
+  isDrawing.value = false
+  console.log('end drawing')
+}
+
+//【全局事件】
+
 /**
  * @param {MouseEvent} event
  */
@@ -512,7 +627,7 @@ async function dropFile(event) {
   event.preventDefault()
   // 如果浏览器支持使用 FileSystemHandle，记录笔记文件的 handle，以便保存时直接保存到原文件中
   // 按理来说不太旧的 Chrome 或者 Edge 应该都行
-  if(!supportFSHandle.value) return;
+  if (!supportFSHandle.value) return;
   for (const item of items) {
     console.log(item, typeof item.getAsFileSystemHandle)
     if (item.kind === 'file' && item.type == 'text/plain' && item.getAsFileSystemHandle) {
@@ -539,7 +654,6 @@ function prevent(event) {
 // 全局快捷键
 import { useActiveElement, useMagicKeys, whenever } from '@vueuse/core'
 import { logicAnd } from '@vueuse/math'
-import RoundBtn from './RoundBtn.vue';
 
 // 编辑文本框时不触发全局快捷键
 const activeElement = useActiveElement()
@@ -586,6 +700,10 @@ const keyX = keys['x']
 const keyC = keys['c']
 const keyShift = keys['shift']
 const keyCtrl = keys['ctrl']
+
+watch(keyCtrl, (v) => {
+  drawMode.value = v
+})
 
 // Z, Ctrl-Z, Ctrl-Shift-Z
 whenever(logicAnd(keyZ, notUsingInput), (v) => {
@@ -1500,6 +1618,23 @@ div#md-content h1 {
   position: absolute;
   right: 10px;
   bottom: 10px;
+}
+
+#drawing-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  background-color: rgba(255, 255, 255, 0.0);
+  pointer-events: none;
+  transition: background-color 0.3s;
+}
+
+.drawing {
+  pointer-events: inherit !important;
+  background-color: rgba(108, 144, 255, 0.2) !important;
 }
 </style>
 

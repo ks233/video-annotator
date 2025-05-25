@@ -33,7 +33,7 @@
         <v-col class="pt-0 pl-7">
           <template v-if="videoInfo == null">No Video</template>
           <template v-else>
-            <template v-if="videoInfo.src != ''">
+            <template v-if="!videoInfo.isLocal">
               <a :href="videoInfo.src"> {{ videoInfo.filename }}</a>
             </template>
             <template v-else>

@@ -1,6 +1,6 @@
 {
   "name": "video-annotator",
-  "private": true,
+  "private": false,
   "type": "module",
   "version": "0.0.0",
   "scripts": {

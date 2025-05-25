@@ -31,7 +31,12 @@
       <!-- 显示当前时间 -->
       <v-row class="mt-1">
         <v-col class="pt-0 pl-7">
-          {{ videoFileName }}
+          <template v-if="videoSrc != ''">
+            <a :href="videoSrc"> {{ videoFileName }}</a>
+          </template>
+          <template v-else>
+            {{ videoFileName }}
+          </template>
         </v-col>
         <v-col class="pt-0 font-size-large time-text">
           {{ toHHMMSS(currentTime) }} / {{ toHHMMSS(videoLength) }} [{{ speedList[currentSpeedIndex] }}x]
@@ -191,7 +196,9 @@ import { useTheme } from 'vuetify'
 
 const debugMode = ref(true)
 
-const videoFileName = ref('SampleVideo')
+const videoFileName = ref('NoVideo')
+const videoSrc = ref('')
+
 
 const videoPlayer = ref(null)
 const player = ref(null)
@@ -315,13 +322,17 @@ onMounted(() => {
   player.value.on('timeupdate', () => {
     updateTime()
   })
-
   player.value.on('pause', () => {
+    console.log(currentTime.value)
     isPlaying.value = false
   })
   player.value.on('play', () => {
     isPlaying.value = true
     updateMetronomeStart()
+  })
+  player.value.on('sourceset', () => {
+    player.value.pause()
+    isPlaying.value = false
   })
   // 油管速度到三倍速的时候不会触发
   player.value.on('ratechange', () => {
@@ -376,6 +387,11 @@ onMounted(() => {
   offsetX.value = timeToOffset(currentTime.value)
 
   console.log(urlParamNoteSrc, urlParamVideoSrc)
+  if (urlParamNoteSrc != null) {
+    loadFromURL(urlParamNoteSrc)
+  } else if (urlParamVideoSrc != null) {
+    loadFromURL(urlParamVideoSrc)
+  }
 })
 
 onUnmounted(() => {
@@ -985,7 +1001,6 @@ function updateTime() {
 }
 
 function updateMetronomeStart() {
-  console.log("pud", currentSpeed.value)
   metronomeStart.value = Date.now() - (player.value.currentTime() / currentSpeed.value) * 1000
 }
 
@@ -1076,16 +1091,11 @@ function toHHMMSS(num) {
  * @param {File} file
  */
 function loadFile(file) {
-  var URL = window.URL || window.webkitURL
-  var fileURL = URL.createObjectURL(file)
   if (file.type == "text/plain") {
     loadNoteJSON(file)
   } else {
     console.log(file)
-    videoFileName.value = file.name
-    player.value.controls(true)
-    player.value.src({ type: file.type, src: fileURL })
-    seek(0)
+    loadLocalVideo(file)
   }
 }
 
@@ -1139,10 +1149,7 @@ const INVALID_URL = -1
  * @param {function(Object):void} jsonCallback
  */
 async function getUrlType(url, jsonCallback) {
-  console.log('================')
   let ext = get_url_extension(url)
-  console.log(url)
-  console.log('ext', ext)
   // 用简单的字符串匹配视频类型
   if (url.startsWith("https://www.youtube.com/" || "www.youtube.com/" || "youtube.com/")) {
     console.log('youtube')
@@ -1159,7 +1166,6 @@ async function getUrlType(url, jsonCallback) {
 
   // 尝试请求并 parse json，如果成功则类型为 json
   try {
-    console.log("wtf")
     const response = await fetch(url);
     // 如果请求失败，直接 invalid
     if (!response.ok) {
@@ -1205,26 +1211,44 @@ function loadYoutubeVideo(url) {
 function loadHtmlVideo(url) {
   player.value.src({ type: 'video/mp4', src: url })
   player.value.controls(true)
+  seek(0)
+}
+
+/**
+ *
+ * @param {File} url
+ */
+function loadLocalVideo(file) {
+  var URL = window.URL || window.webkitURL
+  var fileURL = URL.createObjectURL(file)
+  videoFileName.value = file.name
+  videoSrc.value = ""
+  player.value.controls(true)
+  player.value.src({ type: file.type, src: fileURL })
+  seek(0)
 }
 
 async function loadFromURLPrompt() {
-  let url = prompt('url', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ')
-  const type = await getUrlType(url, (obj) => { loadSaveData(obj) })
-  if (type == V_YOUTUBE) {
-    loadYoutubeVideo(url)
-  } else if (type == V_HTML5) {
-    loadHtmlVideo(url)
+  let url = prompt('输入笔记或视频 URL（请确认当前笔记已保存）', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+  if (url) {
+    reset()
+    await loadFromURL(url)
   }
 }
 
 async function loadFromURL(url) {
-  const type = await getUrlType(url, (obj) => { loadSaveData(obj) })
+  const type = await getUrlType(url, (obj) => {
+    loadSaveData(obj)
+    noteFileHandle = null
+  })
   if (type == V_YOUTUBE) {
     loadYoutubeVideo(url)
     videoFileName.value = url.split('/').pop()
+    videoSrc.value = url
   } else if (type == V_HTML5) {
     loadHtmlVideo(url)
     videoFileName.value = url.split('/').pop()
+    videoSrc.value = url
   }
 }
 
@@ -1289,11 +1313,26 @@ class Note {
   }
 }
 
+function reset() {
+  noteFileHandle.value = null
+  // 暂停
+  player.value.pause()
+  seek(0)
+  // 清空撤销队列
+  clearCommandStack()
+  notes.value = []
+  selectedNote.value = {
+    id: "default",
+    time: 0,
+    text: ""
+  }
+}
+
 function makeSaveData() {
   const saveData = {
     showVideo: showVideo.value,
     editMode: editMode.value,
-    videoSrc: "",
+    videoSrc: videoSrc.value,
     markers: {
       bpm: tlMarkerBPM.value,
       beat: tlMarkerBeat.value,
@@ -1310,6 +1349,7 @@ function loadSaveData(saveData) {
     console.log('invalid save data!')
     return
   }
+  reset()
   tlMarkerBPM.value = saveData.markers.bpm
   tlMarkerBeat.value = saveData.markers.beat
   tlMarkerOffset.value = saveData.markers.offset
@@ -1318,9 +1358,9 @@ function loadSaveData(saveData) {
   console.log(saveData.editMode)
   editMode.value = saveData.editMode ?? editMode.value
 
-  console.log("videoSrc")
   if (saveData.videoSrc !== "") {
     loadFromURL(saveData.videoSrc)
+    videoSrc.value = saveData.videoSrc
   }
 
   saveData.notes.forEach(note => Object.setPrototypeOf(note, Note.prototype))

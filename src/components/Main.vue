@@ -79,7 +79,7 @@
 
       <!-- 时间轴 -->
       <v-row>
-        <div ref="videoTimeline" class="mt-n2 flex-grow-1 cursor-move" @wheel.prevent="onTimelineScroll">
+        <div id="timeline" ref="videoTimeline" class="mt-n2 flex-grow-1 cursor-move" @wheel.prevent="onTimelineScroll">
           <v-sheet :height="timelineHeight" @mousedown.left="startDragTimeline" color="rgb(var(--v-theme-timeline))"
             @click.right.prevent.stop :width="Math.max(windowWidth, videoLength * timeScale)">
 
@@ -1174,7 +1174,7 @@ function finishDragTimestamp(event) {
   draggingTimestamp.value = false
   if (startDragXTs == event.clientX) return;
   draggedNote.time = offsetToTime(timestampOffsetX.value)
-  finishRegisterMove(draggedNote)
+  finishRegisterMove(draggedNote.value)
   sortNotes()
   selectNoteByCurrentTime()
 }
@@ -1816,6 +1816,15 @@ div#md-content h1 {
 .drawing {
   pointer-events: inherit !important;
   background-color: rgba(108, 144, 255, 0.2) !important;
+}
+
+#timeline * {
+  -webkit-user-select: none;
+  /* Safari */
+  -ms-user-select: none;
+  /* IE 10 and IE 11 */
+  user-select: none;
+  /* Standard syntax */
 }
 </style>
 

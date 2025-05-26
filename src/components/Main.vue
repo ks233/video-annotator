@@ -16,14 +16,15 @@
           <v-sheet class="d-flex" height="70vh" :elevation="2" style="position: relative">
             <!-- 叠在视频上方的绘图层 -->
             <div id="drawing-layer" v-show="showVideo && videoInfo != null" ref="drawingLayer" class="no-select-text"
-              :class="keyCtrl ? 'drawing' : ''">
+              :class="keyCtrl && polylineDrawable ? 'drawing' : ''">
               <svg width="100%" height="100%" style="justify-content: center;" @mousedown="startDrawing"
                 @mousemove="drawing" @mouseup="endDrawing" @click.right.prevent>
-
-                <polyline :points="polyline ? polyline.polyString : ''"
-                  style="fill:none;stroke:white;stroke-width:8;fill-rule:evenodd;" />
-                <polyline :points="polyline ? polyline.polyString : ''"
-                  style="fill:none;stroke:red;stroke-width:3;fill-rule:evenodd;" />
+                <template v-if="polylineDrawable" v-for="polyline in selectedNote.polylines">
+                  <polyline :points="polyline.polyString"
+                    style="fill:none;stroke:white;stroke-width:8;fill-rule:evenodd;" />
+                  <polyline :points="polyline.polyString"
+                    style="fill:none;stroke:red;stroke-width:3;fill-rule:evenodd;" />
+                </template>
               </svg>
             </div>
             <video ref="videoPlayer" id="my-player" class="video-js"></video>
@@ -301,9 +302,8 @@ const mdContent = ref('')
 const selectedNote = ref({
   id: "default",
   time: 0,
-  text: ""
-}
-)
+  text: "",
+})
 
 const theme = useTheme()
 
@@ -491,6 +491,7 @@ onMounted(() => {
     loadFromURL(urlParamVideoSrc)
   }
   document.getElementById('my-player').style.setProperty('display', (showVideo.value == true && videoInfo.value != null) ? "inline-block" : "none")
+  reset()
 })
 
 onUnmounted(() => {
@@ -511,12 +512,13 @@ onUnmounted(() => {
 import { useElementSize } from '@vueuse/core';
 const drawingLayer = ref(null)
 
-const testCircleX = ref('0')
-const testCircleY = ref('0')
 const isDrawing = ref(false)
 
 let counter = 0
-const polyline = ref(null)
+const polylineDrawable = computed(() => {
+  let timeDiff = currentTime.value - selectedNote.value.time
+  return -0.1 < timeDiff && timeDiff < 1;
+})
 
 const layerSize = ref(
   useElementSize(
@@ -551,7 +553,10 @@ class Polyline {
     let str = ''
     let aRatio = this.w / this.h
     let bRatio = w / h
-    let vRatio = videoInfo.value.width / videoInfo.value.height
+    let vRatio = 16 / 9
+    if (videoInfo.value.height != 0) {
+      vRatio = videoInfo.value.width / videoInfo.value.height
+    }
     let ba = 0
     if (aRatio > vRatio && bRatio > vRatio) { // AB 都扁，比容器高度
       ba = h / this.h
@@ -575,13 +580,20 @@ class Polyline {
   }
 }
 
+let polylineDrawing = ref(null)
+let newPolyDraw = true
 /**
  *
  * @param {MouseEvent} event
  */
 function startDrawing(event) {
+  if (newPolyDraw) {
+    selectedNote.value.polylines = []
+    newPolyDraw = false
+  }
   isDrawing.value = true
-  polyline.value = new Polyline()
+  polylineDrawing.value = new Polyline()
+  selectedNote.value.polylines.push(polylineDrawing.value)
   console.log('start drawing', event)
   counter = 0
 }
@@ -591,11 +603,9 @@ function drawing(event) {
   counter++;
   if (counter % 2 != 0) return;
   console.log('drawing')
-  testCircleX.value = event.offsetX / event.target.clientWidth * 100 + '%'
-  testCircleY.value = event.offsetY / event.target.clientHeight * 100 + '%'
-
-  polyline.value.addPoint(event.offsetX, event.offsetY)
+  polylineDrawing.value.addPoint(event.offsetX, event.offsetY)
 }
+
 function endDrawing(event) {
   isDrawing.value = false
   console.log('end drawing')
@@ -733,6 +743,7 @@ const keyCtrl = keys['ctrl']
 
 watch(keyCtrl, (v) => {
   drawMode.value = v
+  newPolyDraw = true
 })
 
 // Z, Ctrl-Z, Ctrl-Shift-Z
@@ -1250,6 +1261,8 @@ function seek(time) {
   if (videoInfo.value) {
     player.value.currentTime(time.clamp(0, videoLength.value));
   } else {
+    currentTime.value = time.clamp(0, videoLength.value)
+    offsetX.value = timeToOffset(currentTime.value)
     updateMetronomeStart()
   }
 }
@@ -1405,8 +1418,19 @@ function download(content, fileName, contentType) {
 
 async function saveNoteJSON() {
   let saveData = makeSaveData()
-  let json = JSON.stringify(saveData, null, 4)
+  let json = JSON.stringify(saveData, replacer, 2)
 
+  // GPT 师傅写的使 polyline 的 points 变成为一行的魔法
+  function replacer(key, value) {
+    if (key === "points" && Array.isArray(value)) {
+      return value.map(pair => `[${pair.join(',')}]`).join(', ');
+    }
+    return value;
+  }
+  json = json.replace(/"points": "(\[.*?\])"/g, (match, group) => {
+    return `"points": [ ${group} ]`;
+  });
+  // 直接读写或者下载
   if (noteFileHandle.value != null) {
     console.log('write')
     const writable = await noteFileHandle.value.createWritable();
@@ -1586,6 +1610,7 @@ class Note {
     this.id = nanoid()
     this.time = time
     this.text = text
+    this.polylines = []
   }
   get title() {
     let s = firstLine(removeTitle(this.text)).trim()
@@ -1615,11 +1640,7 @@ function reset() {
   // 清空撤销队列
   clearCommandStack()
   notes.value = []
-  selectedNote.value = {
-    id: "default",
-    time: 0,
-    text: ""
-  }
+  selectedNote.value = new Note(0, '')
 }
 
 function makeSaveData() {
@@ -1659,7 +1680,14 @@ function loadSaveData(saveData) {
       loadFromURL(saveData.videoInfo.src)
   }
 
-  saveData.notes.forEach(note => Object.setPrototypeOf(note, Note.prototype))
+  saveData.notes.forEach(note => {
+    Object.setPrototypeOf(note, Note.prototype)
+    if (note.polylines != null) {
+      note.polylines.forEach(polyline => {
+        Object.setPrototypeOf(polyline, Polyline.prototype)
+      })
+    }
+  })
   notes.value = saveData.notes
 }
 

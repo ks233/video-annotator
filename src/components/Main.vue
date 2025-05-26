@@ -423,6 +423,9 @@ onMounted(() => {
     isPlaying.value = true
     updateMetronomeStart()
   })
+  player.value.on('seeked', () => {
+    updateMetronomeStart()
+  })
   player.value.on('sourceset', () => {
     player.value.pause()
     isPlaying.value = false
@@ -453,9 +456,9 @@ onMounted(() => {
   var delta = 0
   var nextBeat = 0
   var nextBeatTime = 0
-  // 一直在跑，不知道对性能有多大影响，目前好像不太卡
+  // 节拍器计时器，一直在跑，不知道对性能有多大影响，目前好像不太卡
   setInterval(() => {
-    delta = (Date.now() - metronomeStart.value) / 1000 - tlMarkerOffset.value * (tlMarkerInterval.value / currentSpeed.value);
+    delta = (Date.now() - metronomeStart.value) / 1000 - tlMarkerOffset.value * (tlMarkerInterval.value / currentSpeed.value) - 0.01; // 往前偏移一丢丢，不然第一拍不响
     nextBeat = Math.ceil(prevTime / (tlMarkerInterval.value / currentSpeed.value))
     nextBeatTime = nextBeat * (tlMarkerInterval.value / currentSpeed.value)
     if (delta > nextBeatTime) {
@@ -1246,8 +1249,9 @@ function play() {
 function seek(time) {
   if (videoInfo.value) {
     player.value.currentTime(time.clamp(0, videoLength.value));
+  } else {
+    updateMetronomeStart()
   }
-  updateMetronomeStart()
 }
 
 const timeScale = ref(100)

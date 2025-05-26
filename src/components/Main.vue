@@ -1017,7 +1017,7 @@ function deleteCurrentNote() {
  * @param {Note} note
  */
 function onTimestampClick(event, note) {
-  if (event.clientX != startDragXts) {
+  if (event.clientX != startDragXTs) {
     return;
   } else {
     selectAndSeekNote(note)
@@ -1047,11 +1047,13 @@ function onTimelineScroll(event) {
 
 // 拖拽时间轴
 
-let prevX = 0
+let startDragX = 0
+let startDragTime = 0
 
 function startDragTimeline(event) {
   draggingTimeline.value = true
-  prevX = event.clientX
+  startDragX = event.clientX
+  startDragTime = currentTime.value
 }
 
 /**
@@ -1059,10 +1061,13 @@ function startDragTimeline(event) {
  */
 function dragTimeline(event) {
   if (!draggingTimeline.value) return;
-  let delta = prevX - event.clientX;
-  prevX = event.clientX
-  // videoTimeline.value.scrollLeft += delta;
-  offsetX.value += delta;
+  let delta = startDragX - event.clientX;
+  if (snapToMarker.value) {
+    let targetMarker = Math.round((startDragTime + delta / timeScale.value - tlMarkerOffset.value) / tlMarkerInterval.value)
+    offsetX.value = timeToOffset(targetMarker * tlMarkerInterval.value + tlMarkerOffset.value)
+  } else {
+    offsetX.value = timeToOffset(startDragTime) + delta;
+  }
   offsetX.value = Math.max(offsetX.value, -windowWidth.value / 2);
   offsetX.value = Math.min(offsetX.value, timeToOffset(videoLength.value))
   currentTime.value = offsetToTime(offsetX.value)
@@ -1086,7 +1091,9 @@ const timestampOffsetX = ref(0)
 let prevXts = 0
 
 const draggedNote = ref(null);
-let startDragXts = 0
+let startDragXTs = 0
+let startDragTimeTs = 0
+let startDragNoteTimeTs = 0
 
 /**
  *
@@ -1097,24 +1104,30 @@ function startDragTimestamp(event, note) {
   draggedNote.value = note
   draggingTimestamp.value = true
   prevXts = event.clientX
-  startDragXts = event.clientX
+  startDragXTs = event.clientX
+  startDragTimeTs = currentTime.value
+  startDragNoteTimeTs = note.time
   timestampOffsetX.value = timeToOffset(draggedNote.value.time)
   startRegisterMove(note)
 }
-
 
 /**
  * @param {MouseEvent} event
  */
 function dragTimestamp(event) {
   if (!draggingTimestamp.value) return;
-  let delta = prevXts - event.clientX;
-  prevXts = event.clientX
+  let delta = event.clientX - startDragXTs;
   // videoTimeline.value.scrollLeft += delta;
-  timestampOffsetX.value -= delta;
-  timestampOffsetX.value = Math.max(timestampOffsetX.value, -windowWidth.value / 2);
-  timestampOffsetX.value = Math.min(timestampOffsetX.value, timeToOffset(videoLength.value))
-  draggedNote.value.time = offsetToTime(timestampOffsetX.value)
+  if (snapToMarker.value) {
+    let targetMarker = Math.round((offsetToTime(timestampOffsetX.value + delta) + currentTime.value - startDragTimeTs - tlMarkerOffset.value) / tlMarkerInterval.value)
+    let newTime = (targetMarker + tlMarkerOffset.value) * tlMarkerInterval.value
+    draggedNote.value.time = newTime.clamp(0, videoLength.value)
+  } else {
+    timestampOffsetX.value = delta + timeToOffset(startDragNoteTimeTs + currentTime.value - startDragTimeTs);
+    timestampOffsetX.value = Math.max(timestampOffsetX.value, -windowWidth.value / 2);
+    timestampOffsetX.value = Math.min(timestampOffsetX.value, timeToOffset(videoLength.value))
+    draggedNote.value.time = offsetToTime(timestampOffsetX.value)
+  }
 }
 
 /**
@@ -1123,7 +1136,7 @@ function dragTimestamp(event) {
 function finishDragTimestamp(event) {
   if (!draggingTimestamp.value) return;
   draggingTimestamp.value = false
-  if (startDragXts == event.clientX) return;
+  if (startDragXTs == event.clientX) return;
   draggedNote.time = offsetToTime(timestampOffsetX.value)
   finishRegisterMove(draggedNote)
   sortNotes()
@@ -1297,15 +1310,15 @@ function pasteImage(event) {
   }
 }
 
-function deleteImage(name){
+function deleteImage(name) {
   delete imageDatabase.value[name]
 }
 
-function renameImage(name){
+function renameImage(name) {
   let newName = prompt('Rename Image:', name)
-  if(newName){
-    if(newName != name){
-      if(!imageDatabase.value.hasOwnProperty(newName)){
+  if (newName) {
+    if (newName != name) {
+      if (!imageDatabase.value.hasOwnProperty(newName)) {
         imageDatabase.value[newName] = imageDatabase.value[name]
         deleteImage(name)
       }
@@ -1313,21 +1326,21 @@ function renameImage(name){
   }
 }
 
-function insertImage(name){
+function insertImage(name) {
   myMdEditor.value.insert((selectedText) => {
-  /**
-   * @return targetValue    待插入内容
-   * @return select         插入后是否自动选中内容，默认：true
-   * @return deviationStart 插入后选中内容鼠标开始位置，默认：0
-   * @return deviationEnd   插入后选中内容鼠标结束位置，默认：0
-   */
-  return {
-    targetValue: `![](__${name})`,
-    select: false,
-    deviationStart: 0,
-    deviationEnd: 0,
-  };
-});
+    /**
+     * @return targetValue    待插入内容
+     * @return select         插入后是否自动选中内容，默认：true
+     * @return deviationStart 插入后选中内容鼠标开始位置，默认：0
+     * @return deviationEnd   插入后选中内容鼠标结束位置，默认：0
+     */
+    return {
+      targetValue: `![](__${name})`,
+      select: false,
+      deviationStart: 0,
+      deviationEnd: 0,
+    };
+  });
 }
 
 // const keyCtrlV = keys['ctrl+v']

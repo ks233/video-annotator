@@ -17,11 +17,13 @@
             <!-- 叠在视频上方的绘图层 -->
             <div id="drawing-layer" v-show="showVideo && videoInfo != null" ref="drawingLayer" class="no-select-text"
               :class="keyCtrl && polylineDrawable ? 'drawing' : ''">
-              <svg width="100%" height="100%" style="justify-content: center;" @mousedown="startDrawing"
-                @mousemove="drawing" @mouseup="endDrawing" @click.right.prevent>
+              <svg width="100%" height="100%" style="justify-content: center;" @mousedown.left="startDrawing"
+                @mousemove="drawing" @mousedown.right="isErasing = true" @mouseup.right="isErasing = false"
+                @click.right.prevent>
                 <template v-if="polylineDrawable" v-for="polyline in selectedNote.polylines">
                   <polyline :points="polyline.polyString"
-                    style="fill:none;stroke:white;stroke-width:8;fill-rule:evenodd;" />
+                    style="fill:none;stroke:white;stroke-width:8;fill-rule:evenodd;"
+                    @mousemove="removeIfErasing(polyline)" />
                   <polyline :points="polyline.polyString"
                     style="fill:none;stroke:red;stroke-width:3;fill-rule:evenodd;" />
                 </template>
@@ -339,6 +341,7 @@ const tlMarkerMinorRatio = ref(0.08)
 // 用 BPM 定义刻度的间隔
 const tlMarkerBPM = ref(60)
 const tlMarkerInterval = computed(() => 60.0 / tlMarkerBPM.value)
+const tlMarkerIntervalStretched = computed(() => tlMarkerInterval.value / currentSpeed.value)
 // 大刻度
 const tlMarkerBeat = ref(4)
 // 整体偏移的刻度数量，单位不是时间而是刻度，代表的时间随 BPM 变化
@@ -393,7 +396,6 @@ watch(videoInfo, (v) => {
 const useMetronome = ref(false)
 const metronomeStart = ref(Date.now())
 
-
 const snapToMarker = ref(false)
 
 onMounted(() => {
@@ -432,20 +434,32 @@ onMounted(() => {
     videoInfo.value.height = player.value.videoHeight()
   })
   player.value.on('play', () => {
+    console.log('play')
     isPlaying.value = true
-    updateMetronomeStart()
+    if (useMetronome.value == true) {
+      // 触发 seeked 事件，重新对准节拍器
+      player.value.currentTime(currentTime.value)
+    }
   })
   player.value.on('seeked', () => {
+    console.log('seeked')
     updateMetronomeStart()
   })
   player.value.on('sourceset', () => {
+    console.log('sourceset')
     player.value.pause()
     isPlaying.value = false
     videoInfo.value.duration = player.value.duration()
   })
   // 油管速度到三倍速的时候不会触发
   player.value.on('ratechange', () => {
+    console.log('ratechange')
     currentSpeedIndex.value = speedList.findIndex(n => n == player.value.playbackRate())
+    if (useMetronome.value == true) {
+      // 触发 seeked 事件，重新对准节拍器
+      // 只有在 seeked 事件里更新 metronome 才准，直接在其它地方更新会有延迟，太怪了
+      player.value.currentTime(currentTime.value)
+    }
   })
 
   updateWindowSize()
@@ -464,15 +478,18 @@ onMounted(() => {
   document.addEventListener('mouseup', globalMouseUp);
   document.addEventListener('paste', pasteImage);
   // 节拍器设置
-  var prevTime = 0
-  var delta = 0
-  var nextBeat = 0
-  var nextBeatTime = 0
+  let prevTime = 0
+  let delta = 0
+  let nextBeat = 0
+  let nextBeatTime = 0
   // 节拍器计时器，一直在跑，不知道对性能有多大影响，目前好像不太卡
   setInterval(() => {
-    delta = (Date.now() - metronomeStart.value) / 1000 - tlMarkerOffset.value * (tlMarkerInterval.value / currentSpeed.value) - 0.01; // 往前偏移一丢丢，不然第一拍不响
-    nextBeat = Math.ceil(prevTime / (tlMarkerInterval.value / currentSpeed.value))
-    nextBeatTime = nextBeat * (tlMarkerInterval.value / currentSpeed.value)
+    delta = (Date.now() - metronomeStart.value) / 1000 - tlMarkerOffset.value * tlMarkerIntervalStretched.value - 0.01; // 往前偏移一丢丢，不然第一拍不响
+
+    // delta = player.value.currentTime() - tlMarkerOffset.value * tlMarkerIntervalStretched.value - 0.01;
+
+    nextBeat = Math.ceil(prevTime / tlMarkerIntervalStretched.value)
+    nextBeatTime = nextBeat * tlMarkerIntervalStretched.value
     if (delta > nextBeatTime) {
       if (useMetronome.value && isPlaying.value) {
         playMetronome(nextBeat % tlMarkerBeat.value == 0)
@@ -480,7 +497,7 @@ onMounted(() => {
     }
     prevTime = delta
     // alternatively just show wall clock time:
-  }, 10); // 每 0.01s 更新一下计时器
+  }, 5); // 每 5ms 更新一下计时器
 
   // Check to see if Media-Queries are supported
   if (window.matchMedia) {
@@ -540,8 +557,6 @@ const layerSize = ref(
   ),
 )
 
-const drawMode = ref(false)
-
 class Polyline {
   /**
    * @param aw 绘制时的容器宽度，用来在容器大小变化时计算坐标
@@ -593,34 +608,33 @@ class Polyline {
 }
 
 let polylineDrawing = ref(null)
-let newPolyDraw = true
 /**
  *
  * @param {MouseEvent} event
  */
 function startDrawing(event) {
-  if (newPolyDraw) {
-    selectedNote.value.polylines = []
-    newPolyDraw = false
-  }
   isDrawing.value = true
   polylineDrawing.value = new Polyline()
   selectedNote.value.polylines.push(polylineDrawing.value)
-  console.log('start drawing', event)
   counter = 0
 }
 
 function drawing(event) {
   if (!isDrawing.value) return;
   counter++;
-  if (counter % 2 != 0) return;
-  console.log('drawing')
+  if (counter % 8 != 0) return;
   polylineDrawing.value.addPoint(event.offsetX, event.offsetY)
 }
 
-function endDrawing(event) {
+function finishDrawing(event) {
   isDrawing.value = false
-  console.log('end drawing')
+}
+
+const isErasing = ref(false)
+
+function removeIfErasing(polyline) {
+  if (!isErasing.value) return;
+  selectedNote.value.polylines = selectedNote.value.polylines.filter(p => p != polyline)
 }
 
 //【全局事件】
@@ -648,6 +662,9 @@ function globalMouseUp(event) {
   }
   if (draggingTimestamp.value) {
     finishDragTimestamp(event)
+  }
+  if (isDrawing.value) {
+    finishDrawing(event)
   }
 }
 
@@ -740,9 +757,9 @@ const storedSpeedIndex = ref(4)
 
 const currentSpeed = computed(() => speedList[currentSpeedIndex.value])
 
-watch(currentSpeed, (v) => {
-  updateMetronomeStart()
-})
+// watch(currentSpeed, (v) => {
+//   updateMetronomeStart()
+// })
 
 // Z X C 变速，和 PotPlayer 类似
 // Ctrl-Z 撤销，Ctrl-Shift-Z 重做
@@ -752,11 +769,6 @@ const keyX = keys['x']
 const keyC = keys['c']
 const keyShift = keys['shift']
 const keyCtrl = keys['ctrl']
-
-watch(keyCtrl, (v) => {
-  drawMode.value = v
-  newPolyDraw = true
-})
 
 // Z, Ctrl-Z, Ctrl-Shift-Z
 whenever(logicAnd(keyZ, notUsingInput), (v) => {
@@ -1247,7 +1259,9 @@ function onPlayerTimeUpdate() {
 }
 
 function updateMetronomeStart() {
+  let spd = currentSpeed.value
   metronomeStart.value = Date.now() - (currentTime.value / currentSpeed.value) * 1000
+  console.log(currentSpeed.value)
 }
 
 /**

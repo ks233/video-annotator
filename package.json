@@ -12,6 +12,7 @@
   "dependencies": {
     "@fontsource/roboto": "5.2.5",
     "@mdi/font": "7.4.47",
+    "@vavt/v3-extension": "^3.0.0",
     "@vueuse/core": "^13.2.0",
     "@vueuse/math": "^13.2.0",
     "marked": "^15.0.12",

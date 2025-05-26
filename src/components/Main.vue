@@ -35,7 +35,11 @@
         <v-col v-show="(!(!editMode && !showVideo))" :cols="4" height="70vh">
           <v-sheet height="70vh" class="d-flex">
             <MdEditor ref="myMdEditor" v-show="editMode" id="md-editor" v-model="selectedNote.text" class="h-100"
-              :toolbars="mdEditorToolbar" :preview="false" :theme="theme.global.name.value" />
+              :toolbars="mdEditorToolbar" :preview="false" :theme="theme.global.name.value">
+              <template #defToolbars>
+                <Emoji :emojis="emojis" :selectAfterInsert="false" />
+              </template>
+            </MdEditor>
             <div class="md-display pa-10" v-if="!editMode" v-html="mdContent"></div>
           </v-sheet>
         </v-col>
@@ -146,7 +150,15 @@
               <round-btn @click="imageDatabaseDialog = true" icon="mdi-image-multiple-outline"></round-btn>
               <v-divider vertical class="mx-5"></v-divider>
               <round-btn @click="saveNoteJSON()" icon="mdi-content-save-outline"></round-btn>
-              <round-btn @click="loadFromURLPrompt()" icon="mdi-link-plus"></round-btn>
+              <v-speed-dial location="bottom center" transition="fade-transition">
+                <template v-slot:activator="{ props: activatorProps }">
+                  <!-- <v-fab v-bind="activatorProps" size="large" icon="$vuetify"></v-fab> -->
+                  <v-btn v-bind="activatorProps" icon="mdi-file-plus-outline" class="mx-1" size="x-large"></v-btn>
+                </template>
+                <v-btn :key="1" @click="loadFromFileInput()" icon="mdi-upload"></v-btn>
+                <v-btn :key="2" @click="loadFromURLPrompt()" icon="mdi-link-plus"></v-btn>
+              </v-speed-dial>
+              <v-file-input ref="fileInputBox" @change="onFileInputBox" v-show="false" multiple> </v-file-input>
             </v-col>
             <v-col>
             </v-col>
@@ -156,7 +168,7 @@
         <!-- BPM 与偏移量调整 -->
         <v-col :cols="3">
           <v-row>
-            <v-col :cols="2" class="d-flex flex-column align-end">
+            <v-col :cols="3" class="d-flex flex-column align-end">
               <v-btn @mousedown.prevent @click="useMetronome = !useMetronome" class="mx-1 my-2" icon="mdi-metronome"
                 :color="useMetronome ? 'blue-lighten-1' : '--v-theme-surface'"></v-btn>
               <v-btn @mousedown.prevent @click="snapToMarker = !snapToMarker" class="mx-1" icon="mdi-magnet"
@@ -923,8 +935,13 @@ function setNoteTimeByID(id, time) {
   sortNotes()
 }
 
+import { Emoji } from '@vavt/v3-extension'
+import '@vavt/v3-extension/lib/asset/Emoji.css';
+
 // Markdown 编辑器（md-editor-v3）工具栏的按钮布局
-const mdEditorToolbar = ['bold',
+const mdEditorToolbar = [
+  // 0, '-',
+  'bold',
   'underline',
   'italic',
   '-',
@@ -933,10 +950,15 @@ const mdEditorToolbar = ['bold',
   'unorderedList',
   'orderedList',
   'task',
-  // '=',
+  '=', 0
   // 'preview',
   // 'previewOnly',
 ]
+
+const emojis = [
+  '🔴', '🟠', '🟡', '🟢', '🔵', '🟣',
+  '✔️', '❌', '❓', '💬', 'ℹ️', '⚠️',
+  '🎼', '🎹', '🎸', '🥁', '🎻', '🎺',]
 
 const editMode = ref(true)
 
@@ -988,7 +1010,7 @@ function addNote(newNote, regUndo = false) {
 }
 
 function addDefaultNote() {
-  addNote(new Note(currentTime.value, "# " + (notes.value.length + 1)), true)
+  addNote(new Note(currentTime.value, "# "), true)
 }
 
 function deleteNote(note, regUndo = false) {
@@ -1437,7 +1459,11 @@ async function saveNoteJSON() {
     await writable.write(json);
     await writable.close();
   } else {
-    download(json, videoInfo.value.filename + '.txt', 'text/plain');
+    if (videoInfo.value != null) {
+      download(json, videoInfo.value.filename + '.txt', 'text/plain');
+    } else {
+      download(json, 'Note.txt', 'text/plain');
+    }
   }
 }
 
@@ -1567,6 +1593,18 @@ async function loadFromURL(url) {
     loadYoutubeVideo(url)
   } else if (type == V_HTML5) {
     loadHtmlVideo(url)
+  }
+}
+
+const fileInputBox = ref(null)
+
+function loadFromFileInput() {
+  fileInputBox.value.click()
+}
+
+function onFileInputBox(event) {
+  for (const file of event.target.files) {
+    loadFile(file)
   }
 }
 
@@ -1783,6 +1821,17 @@ div#md-content h1 {
 
 <!-- 没有 scoped 才能影响 Marked 渲染生成的内容 -->
 <style>
+#md-editor .cm-line {
+  font-size: 2em;
+  line-height: 1.5;
+  height: auto;
+  /* margin-top: 6px; */
+}
+
+#md-editor .cm-content {
+  padding-top: 12px;
+}
+
 .md-display img {
   max-width: 100%;
   max-height: 400px;
@@ -1801,5 +1850,34 @@ div#md-content h1 {
   margin-top: 8px;
   margin-bottom: 8px;
   /* object-fit: contain; */
+}
+
+.md-display p {
+  font-size: 1.5em;
+  margin-top: 8px;
+  margin-bottom: 8px;
+  /* object-fit: contain; */
+}
+
+.md-display li {
+  margin-left: 1em;
+  font-size: 1.5em;
+  margin-top: 8px;
+  margin-bottom: 8px;
+  /* object-fit: contain; */
+}
+
+.emoji-container .emojis li {
+  font-size: 24px;
+  height: 48px;
+  width: 48px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+ol.emojis {
+  width: 286px;
+  margin: 0px;
 }
 </style>

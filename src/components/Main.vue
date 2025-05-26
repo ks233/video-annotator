@@ -329,7 +329,7 @@ const tlMarkerBPM = ref(60)
 const tlMarkerInterval = computed(() => 60.0 / tlMarkerBPM.value)
 // 大刻度
 const tlMarkerBeat = ref(4)
-// 刻度的整体时间偏移
+// 整体偏移的刻度数量，单位不是时间而是刻度，代表的时间随 BPM 变化
 const tlMarkerOffset = ref(0)
 // 覆盖整个视频时间需要的刻度数量
 const tlMarkerCount = computed(() => {
@@ -1064,7 +1064,7 @@ function dragTimeline(event) {
   let delta = startDragX - event.clientX;
   if (snapToMarker.value) {
     let targetMarker = Math.round((startDragTime + delta / timeScale.value - tlMarkerOffset.value) / tlMarkerInterval.value)
-    offsetX.value = timeToOffset(targetMarker * tlMarkerInterval.value + tlMarkerOffset.value)
+    offsetX.value = timeToOffset((targetMarker + tlMarkerOffset.value) * tlMarkerInterval.value)
   } else {
     offsetX.value = timeToOffset(startDragTime) + delta;
   }

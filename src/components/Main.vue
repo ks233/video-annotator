@@ -1063,7 +1063,7 @@ function dragTimeline(event) {
   if (!draggingTimeline.value) return;
   let delta = startDragX - event.clientX;
   if (snapToMarker.value) {
-    let targetMarker = Math.round((startDragTime + delta / timeScale.value - tlMarkerOffset.value) / tlMarkerInterval.value)
+    let targetMarker = Math.round((startDragTime + delta / timeScale.value - tlMarkerOffset.value * tlMarkerInterval.value) / tlMarkerInterval.value)
     offsetX.value = timeToOffset((targetMarker + tlMarkerOffset.value) * tlMarkerInterval.value)
   } else {
     offsetX.value = timeToOffset(startDragTime) + delta;
@@ -1119,7 +1119,7 @@ function dragTimestamp(event) {
   let delta = event.clientX - startDragXTs;
   // videoTimeline.value.scrollLeft += delta;
   if (snapToMarker.value) {
-    let targetMarker = Math.round((offsetToTime(timestampOffsetX.value + delta) + currentTime.value - startDragTimeTs - tlMarkerOffset.value) / tlMarkerInterval.value)
+    let targetMarker = Math.round((offsetToTime(timestampOffsetX.value + delta) + currentTime.value - startDragTimeTs - tlMarkerOffset.value * tlMarkerInterval.value) / tlMarkerInterval.value)
     let newTime = (targetMarker + tlMarkerOffset.value) * tlMarkerInterval.value
     draggedNote.value.time = newTime.clamp(0, videoLength.value)
   } else {

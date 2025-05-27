@@ -169,14 +169,14 @@
 
         <!-- 提示 -->
         <v-snackbar v-model="snackbarSaveSuccess" :timeout="2000">
-          💾 Saved: "{{ saveFileName }}".
+          💾 Saved: "{{ noteFileHandle != null ? noteFileHandle.name : 'ERROR' }}".
         </v-snackbar>
 
         <!-- BPM 与偏移量调整 -->
         <v-col :cols="3">
           <v-row>
             <v-col :cols="3" class="d-flex flex-column align-end">
-              <v-btn @mousedown.prevent @click="useMetronome = !useMetronome" class="mx-1 my-2" icon="mdi-metronome"
+              <v-btn @mousedown.prevent @click="toggleMetronome" class="mx-1 my-2" icon="mdi-metronome"
                 :color="useMetronome ? 'blue-lighten-1' : '--v-theme-surface'"></v-btn>
               <v-btn @mousedown.prevent @click="snapToMarker = !snapToMarker" class="mx-1" icon="mdi-magnet"
                 :color="snapToMarker ? 'pink-lighten-1' : '--v-theme-surface'"></v-btn>
@@ -433,6 +433,7 @@ onMounted(() => {
   })
   player.value.on('pause', () => {
     isPlaying.value = false
+    seeking.value = false
   })
   player.value.on('resize', () => {
     videoInfo.value.width = player.value.videoWidth()
@@ -448,6 +449,7 @@ onMounted(() => {
   })
   player.value.on('seeked', () => {
     console.log('seeked')
+    seeking.value = false
     updateMetronomeStart()
   })
   player.value.on('sourceset', () => {
@@ -627,7 +629,7 @@ function startDrawing(event) {
 function drawing(event) {
   if (!isDrawing.value) return;
   counter++;
-  if (counter % 8 != 0) return;
+  if (counter % 4 != 0) return;
   polylineDrawing.value.addPoint(event.offsetX, event.offsetY)
 }
 
@@ -997,6 +999,7 @@ whenever(keyCtrlE, (v) => {
 
 function updateWindowSize() {
   windowWidth.value = window.innerWidth
+  offsetX.value = timeToOffset(currentTime.value)
 }
 
 async function debug() {
@@ -1261,6 +1264,7 @@ function timeToOffset(time) {
 
 function onPlayerTimeUpdate() {
   if (draggingTimeline.value) return;
+  if (seeking.value) return;
   currentTime.value = player.value.currentTime()
   videoInfo.value.duration = player.value.duration()
   offsetX.value = timeToOffset(currentTime.value);
@@ -1281,6 +1285,14 @@ function playMetronome(firstBeat) {
   audio.play();
 }
 
+function toggleMetronome() {
+  useMetronome.value = !useMetronome.value
+  if (useMetronome.value == true) {
+    seek(currentTime.value)
+  }
+}
+
+
 function play() {
   if (videoInfo.value) {
     if (player.value.paused()) {
@@ -1298,13 +1310,20 @@ function play() {
   }
 }
 
+const seeking = ref(false)
+
 /**
  * 设置当前视频时间，并更新节拍器的时间偏移
  * @param {Number} time 目标时间
  */
 function seek(time) {
+  // 直到 seeked 事件触发，seeking 变为 false
+  // 在 seeking = true 时 onPlayerTimeUpdate 不触发
+  seeking.value = true;
   if (videoInfo.value) {
-    player.value.currentTime(time.clamp(0, videoLength.value));
+    currentTime.value = time.clamp(0, videoLength.value)
+    player.value.currentTime(currentTime.value);
+    offsetX.value = timeToOffset(currentTime.value)
   } else {
     currentTime.value = time.clamp(0, videoLength.value)
     offsetX.value = timeToOffset(currentTime.value)

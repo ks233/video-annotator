@@ -333,7 +333,7 @@ function toggleTheme() {
 
 watch(selectedNote, (note) => {
   if (note != null) {
-    mdContent.value = DOMPurify.sanitize(marked.parse(embedImage(note.text), { breaks: true}))
+    mdContent.value = DOMPurify.sanitize(marked.parse(embedImage(note.text), { breaks: true }))
   }
 }, {
   deep: true
@@ -523,8 +523,8 @@ onMounted(async () => {
     // Default (when Media-Queries are not supported)
   }
 
+  reset()
   offsetX.value = timeToOffset(currentTime.value)
-
   console.log(urlParamNoteSrc, urlParamVideoSrc)
   if (urlParamNoteSrc != null) {
     if (await getUrlType(urlParamNoteSrc, (o) => { }) == INVALID_URL) {
@@ -538,7 +538,7 @@ onMounted(async () => {
     loadFromURL(urlParamVideoSrc)
   }
   document.getElementById('my-player').style.setProperty('display', (showVideo.value == true && videoInfo.value != null) ? "inline-block" : "none")
-  reset()
+
 })
 
 onUnmounted(() => {
@@ -1656,6 +1656,7 @@ async function loadFromURL(url) {
   } else if (type == V_HTML5) {
     loadHtmlVideo(url)
   }
+  selectNoteByCurrentTime()
 }
 
 const fileInputBox = ref(null)
@@ -1954,7 +1955,9 @@ a:active {
   margin-bottom: 8px;
 }
 
-.md-display strong, u, em {
+.md-display strong,
+u,
+em {
   color: var(--bold-color);
 }
 

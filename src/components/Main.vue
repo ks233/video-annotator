@@ -81,52 +81,63 @@
 
       <!-- 时间轴 -->
       <v-row>
-          <v-sheet id="timeline" ref="videoTimeline" class="overflow-visible cursor-move position-relative" @wheel.prevent="onTimelineScroll" :height="timelineHeight"
-            @mousedown.left="startDragTimeline" color="rgb(var(--v-theme-timeline))" @click.right.prevent.stop
-            :width="Math.max(windowWidth, videoLength * timeScale)">
+        <v-sheet id="timeline" ref="videoTimeline" class="overflow-visible cursor-move position-relative no-select-text"
+          @wheel.prevent="onTimelineScroll" :height="timelineHeight" @mousedown.left="startDragTimeline"
+          color="rgb(var(--v-theme-timeline))" @click.right.prevent.stop
+          :width="Math.max(windowWidth, videoLength * timeScale)">
 
-            <!-- 表示当前播放时间的线，始终在 timeline 中间 -->
-            <v-divider :thickness="3" class="center-line border-opacity-75" vertical color="red-lighten-1"
-              :style="{ 'position': 'absolute', 'left': windowWidth / 2 + 'px', 'height': timelineHeight + 'px' }"></v-divider>
+          <!-- 表示当前播放时间的线，始终在 timeline 中间 -->
+          <v-divider :thickness="3" class="center-line border-opacity-75" vertical color="red-lighten-1"
+            :style="{ 'position': 'absolute', 'left': windowWidth / 2 + 'px', 'height': timelineHeight + 'px' }"></v-divider>
 
-            <!-- 表示视频开头的线 -->
-            <v-divider :thickness="3" class="border-opacity-50" vertical
-              :style="{ 'position': 'absolute', 'left': - offsetX + 'px', 'height': timelineHeight + 'px' }"></v-divider>
+          <!-- 表示视频开头的线 -->
+          <v-divider :thickness="3" class="border-opacity-50" vertical
+            :style="{ 'position': 'absolute', 'left': - offsetX + 'px', 'height': timelineHeight + 'px' }"></v-divider>
 
-            <!-- 表示视频结尾的线 -->
-            <v-divider :thickness="3" class="border-opacity-50" vertical
-              :style="{ 'position': 'absolute', 'left': videoLength * timeScale - offsetX + 'px', 'height': timelineHeight + 'px' }"></v-divider>
-            <!-- 时间戳 -->
-            <div class="d-inline-flex timestamp no-select-text" v-for="note in notes" :key="note.id"
-              :style="{ 'position': 'absolute', 'left': note.time * timeScale - offsetX + 'px', 'height': timelineHeight + 'px' }">
-              <v-divider vertical :thickness="2"></v-divider>
-              <v-card :max-width="250" :min-width="48" class="ml-3 mr-0 my-8 d-flex align-center px-3 text-no-wrap"
-                color="grey-lighten-1" height="36" @click="onTimestampClick($event, note)"
-                @mousedown.left.stop="startDragTimestamp($event, note)"
-                @click.middle.prevent.stop="setNoteToCurrentTime(note)" @mousedown.middle.prevent
-                @click.right.prevent.stop="deleteNote(note, true)">
-                {{ removeTitle(firstLine(note.text)) }}
-              </v-card>
-            </div>
-            <!-- 刻度 -->
-            <template v-for="i in tlMarkerCount">
-              <template v-if="VisibleOnTimeline((i - 1 + tlMarkerOffset) * tlMarkerInterval)">
-                <!-- 大 -->
-                <v-divider v-if="i % tlMarkerBeat == 1 && parseInt(i / tlMarkerBeat) % tlBigMarkerCull == 0"
-                  :thickness="2" class="border-opacity-25" vertical :style="{
-                    'position': 'absolute', 'left': ((i - 1 + tlMarkerOffset) * tlMarkerInterval * timeScale - offsetX) + 'px',
-                    'height': timelineHeight * tlMarkerRatio + 'px',
-                    transform: `translateY(${timelineHeight * (1 - tlMarkerRatio)}px)`
-                  }"></v-divider>
-                <!-- 小 -->
-                <v-divider v-else-if="tlMarkerDensity < 300" :thickness="1" class="border-opacity-25" vertical :style="{
+          <!-- 表示视频结尾的线 -->
+          <v-divider :thickness="3" class="border-opacity-50" vertical
+            :style="{ 'position': 'absolute', 'left': videoLength * timeScale - offsetX + 'px', 'height': timelineHeight + 'px' }"></v-divider>
+          <!-- 时间戳 -->
+          <div class="d-inline-flex no-select-text bypass" v-for="note in notes" :key="note.id"
+            :style="{ 'position': 'absolute', 'left': note.time * timeScale - offsetX + 'px', 'height': timelineHeight + 'px' }">
+            <v-divider vertical :thickness="2"></v-divider>
+            <!-- 小标签 -->
+            <v-card v-if="isMinorNote(note)" :max-width="250" :min-width="48"
+              class="timestamp ml-3 mr-0 mt-2 d-flex align-center px-2 text-no-wrap" color="grey-lighten-1" height="22"
+              @click="onTimestampClick($event, note)" @mousedown.left.stop="startDragTimestamp($event, note)"
+              @click.middle.prevent.stop="setNoteToCurrentTime(note)" @mousedown.middle.prevent
+              @click.right.prevent.stop="deleteNote(note, true)">
+              {{ removeTitle(firstLine(note.text)) }}
+            </v-card>
+            <!-- 大标签 -->
+            <v-card v-else :max-width="250" :min-width="48"
+              class="timestamp ml-3 mr-0 mt-9 d-flex align-center px-3 text-no-wrap" color="grey-lighten-1" height="32"
+              @click="onTimestampClick($event, note)" @mousedown.left.stop="startDragTimestamp($event, note)"
+              @click.middle.prevent.stop="setNoteToCurrentTime(note)" @mousedown.middle.prevent
+              @click.right.prevent.stop="deleteNote(note, true)">
+              {{ removeTitle(firstLine(note.text)) }}
+            </v-card>
+
+          </div>
+          <!-- 刻度 -->
+          <template v-for="i in tlMarkerCount">
+            <template v-if="VisibleOnTimeline((i - 1 + tlMarkerOffset) * tlMarkerInterval)">
+              <!-- 大 -->
+              <v-divider v-if="i % tlMarkerBeat == 1 && parseInt(i / tlMarkerBeat) % tlBigMarkerCull == 0"
+                :thickness="2" class="border-opacity-25" vertical :style="{
                   'position': 'absolute', 'left': ((i - 1 + tlMarkerOffset) * tlMarkerInterval * timeScale - offsetX) + 'px',
-                  'height': timelineHeight * tlMarkerMinorRatio + 'px',
-                  transform: `translateY(${timelineHeight * (1 - tlMarkerMinorRatio)}px)`
+                  'height': timelineHeight * tlMarkerRatio + 'px',
+                  transform: `translateY(${timelineHeight * (1 - tlMarkerRatio)}px)`
                 }"></v-divider>
-              </template>
+              <!-- 小 -->
+              <v-divider v-else-if="tlMarkerDensity < 300" :thickness="1" class="border-opacity-25" vertical :style="{
+                'position': 'absolute', 'left': ((i - 1 + tlMarkerOffset) * tlMarkerInterval * timeScale - offsetX) + 'px',
+                'height': timelineHeight * tlMarkerMinorRatio + 'px',
+                transform: `translateY(${timelineHeight * (1 - tlMarkerMinorRatio)}px)`
+              }"></v-divider>
             </template>
-          </v-sheet>
+          </template>
+        </v-sheet>
       </v-row>
       <v-row class="justify-center mt-5" justify="center">
         <v-col :cols="9">
@@ -146,7 +157,8 @@
               <round-btn @click="play()" :icon="isPlaying ? 'mdi-pause' : 'mdi-play-outline'"></round-btn>
               <round-btn @click="seekNextNote()" icon="mdi-skip-forward-outline"></round-btn>
               <v-divider vertical class="mx-5"></v-divider>
-              <round-btn @click="addDefaultNote()" icon="mdi-text-box-plus-outline"></round-btn>
+              <round-btn @click="addDefaultNote()" @click.right.prevent="addMinorNote()"
+                @click.middle.prevent="chordTool()" icon="mdi-text-box-plus-outline"></round-btn>
               <round-btn @click="deleteCurrentNote()" icon="mdi-delete-outline"></round-btn>
               <round-btn @click="imageDatabaseDialog = true" icon="mdi-image-multiple-outline"></round-btn>
               <v-divider vertical class="mx-5"></v-divider>
@@ -332,11 +344,20 @@ function toggleTheme() {
 
 watch(selectedNote, (note) => {
   if (note != null) {
-    mdContent.value = DOMPurify.sanitize(marked.parse(embedImage(note.text), { breaks: true }))
+    mdContent.value = toMdContent(note.text)
   }
 }, {
   deep: true
 })
+
+function toMdContent(str) {
+  if (str.startsWith("."))
+    str = str.substring(1);
+  str = embedImage(str)
+  str = marked.parse(str, { breaks: true })
+  str = DOMPurify.sanitize(str)
+  return str
+}
 
 // 【时间轴与刻度】
 const timelineHeight = ref(90)
@@ -428,9 +449,15 @@ onMounted(async () => {
   })
 
 
-  player.value.on('timeupdate', () => {
-    onPlayerTimeUpdate()
-  })
+  // player.value.on('timeupdate', () => {
+  //   onPlayerTimeUpdate()
+  // })
+  // videojs 的 updatetime 事件触发频率太低了，不如直接开个计时器
+  setInterval(() => {
+    if (videoInfo.value != null) {
+      onPlayerTimeUpdate()
+    }
+  }, 10); // 每 5ms 更新一下计时器
   player.value.on('pause', () => {
     isPlaying.value = false
     seeking.value = false
@@ -495,10 +522,8 @@ onMounted(async () => {
   let nextBeatTime = 0
   // 节拍器计时器，一直在跑，不知道对性能有多大影响，目前好像不太卡
   setInterval(() => {
-    delta = (Date.now() - metronomeStart.value) / 1000 - tlMarkerOffset.value * tlMarkerIntervalStretched.value - 0.01; // 往前偏移一丢丢，不然第一拍不响
-
+    delta = (Date.now() - metronomeStart.value) / 1000 - tlMarkerOffset.value * tlMarkerIntervalStretched.value - 0.015; // 往前偏移一丢丢，不然第一拍不响
     // delta = player.value.currentTime() - tlMarkerOffset.value * tlMarkerIntervalStretched.value - 0.01;
-
     nextBeat = Math.ceil(prevTime / tlMarkerIntervalStretched.value)
     nextBeatTime = nextBeat * tlMarkerIntervalStretched.value
     if (delta > nextBeatTime) {
@@ -507,8 +532,7 @@ onMounted(async () => {
       }
     }
     prevTime = delta
-    // alternatively just show wall clock time:
-  }, 5); // 每 5ms 更新一下计时器
+  }, 10);
 
   // Check to see if Media-Queries are supported
   if (window.matchMedia) {
@@ -1054,6 +1078,21 @@ function addDefaultNote() {
   addNote(new Note(currentTime.value, "# "), true)
 }
 
+function addMinorNote() {
+  addNote(new Note(currentTime.value, ".# "), true)
+}
+
+function chordTool() {
+  let input = prompt("Chord Tool")
+  let chords = input.split(" ")
+  let nextBeat = Math.ceil(currentTime.value / tlMarkerInterval.value - tlMarkerOffset.value)
+  let nextBeatTime = (nextBeat + tlMarkerOffset.value) * tlMarkerInterval.value
+  for (let i = 0; i < chords.length; i++) {
+    addNote(new Note(nextBeatTime, "# 🎹 " + chords[i]), true)
+    nextBeatTime += tlMarkerInterval.value * tlMarkerBeat.value
+  }
+}
+
 function deleteNote(note, regUndo = false) {
   if (notes.value.length == 0) return;
   var index = notes.value.indexOf(note);
@@ -1252,8 +1291,17 @@ function seekNextNote() {
   }
 }
 
+/**
+ *
+ * @param {Note} note
+ */
+function isMinorNote(note) {
+  return note.text.startsWith('.')
+}
+
 function selectNoteByCurrentTime() {
-  let note = notes.value.findLast(note => note.time < currentTime.value + 0.02)
+  let note = notes.value.findLast(note => !isMinorNote(note) && note.time < currentTime.value + 0.02)
+
   if (note) {
     selectedNote.value = note;
   } else {
@@ -1453,6 +1501,8 @@ function firstLine(str) {
 }
 
 function removeTitle(str) {
+  if (str.startsWith("."))
+    str = str.substring(1);
   while (str.startsWith("#")) {
     str = str.substring(1);
   }
@@ -1884,6 +1934,14 @@ div#md-content h1 {
   background-color: rgba(255, 255, 255, 0.0);
   pointer-events: none;
   transition: background-color 0.3s;
+}
+
+.bypass {
+  pointer-events: none;
+}
+
+.timestamp {
+  pointer-events: all;
 }
 
 .drawing {

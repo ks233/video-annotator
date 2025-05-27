@@ -13,7 +13,7 @@
       <v-row class="px-4 justify-center pt-3">
         <!-- 视频 -->
         <v-col>
-          <v-sheet class="d-flex" height="70vh" :elevation="2" style="position: relative">
+          <v-sheet class="d-flex" height="65vh" :elevation="2" style="position: relative">
             <!-- 叠在视频上方的绘图层 -->
             <div id="drawing-layer" v-show="showVideo && videoInfo != null" ref="drawingLayer" class="no-select-text"
               :class="keyCtrl && polylineDrawable ? 'drawing' : ''">
@@ -34,15 +34,15 @@
           </v-sheet>
         </v-col>
         <!-- Markdown 笔记框 -->
-        <v-col v-show="editMode || (showVideo && videoInfo != null)" :cols="4" height="70vh">
-          <v-sheet height="70vh" class="d-flex">
+        <v-col v-show="editMode || (showVideo && videoInfo != null)" :cols="4" height="65vh">
+          <v-sheet height="65vh" class="d-flex">
             <MdEditor ref="myMdEditor" v-show="editMode" id="md-editor" v-model="selectedNote.text" class="h-100"
               :toolbars="mdEditorToolbar" :preview="false" :theme="theme.global.name.value">
               <template #defToolbars>
                 <Emoji :emojis="emojis" :selectAfterInsert="false" />
               </template>
             </MdEditor>
-            <div class="md-display pa-10" v-if="!editMode" v-html="mdContent"></div>
+            <div class="md-display pa-5" v-if="!editMode" v-html="mdContent"></div>
           </v-sheet>
         </v-col>
       </v-row>
@@ -151,7 +151,6 @@
               <round-btn @click="deleteCurrentNote()" icon="mdi-delete-outline"></round-btn>
               <round-btn @click="imageDatabaseDialog = true" icon="mdi-image-multiple-outline"></round-btn>
               <v-divider vertical class="mx-5"></v-divider>
-              <round-btn @click="saveNoteJSON()" icon="mdi-content-save-outline"></round-btn>
               <v-speed-dial location="bottom center" transition="fade-transition">
                 <template v-slot:activator="{ props: activatorProps }">
                   <!-- <v-fab v-bind="activatorProps" size="large" icon="$vuetify"></v-fab> -->
@@ -161,6 +160,7 @@
                 <v-btn :key="2" @click="loadFromURLPrompt()" icon="mdi-link-plus"></v-btn>
               </v-speed-dial>
               <v-file-input ref="fileInputBox" @change="onFileInputBox" v-show="false" multiple> </v-file-input>
+              <round-btn @click="saveNoteJSON()" icon="mdi-content-save-outline"></round-btn>
             </v-col>
             <v-col>
             </v-col>
@@ -199,8 +199,8 @@
 
       <!-- 图床窗口 -->
       <v-dialog v-model="imageDatabaseDialog" width="auto">
-        <v-card width="40vw" max-height="60vh" min-height="30vh" prepend-icon="mdi-update" text="Ctrl-V to add image."
-          title="Image Database">
+        <v-card width="40vw" max-height="60vh" min-height="30vh" prepend-icon="mdi-update"
+          text="Ctrl-V to add image. Click images to insert into note." title="Image Database">
           <v-row class="pa-5">
             <v-col v-for="(base64, name) in imageDatabase" :key="key"
               class="d-flex child-flex flex-column text-center py-1 px-2" cols="4">
@@ -230,7 +230,7 @@
       </v-row>
 
       <v-btn @mousedown.prevent @click="toggleTheme()" id="toggle-theme" class="mx-1" prepend-icon="mdi-brightness-6"
-        size="small">{{ theme.global.name.value }} Mode</v-btn>
+        size="small">{{ theme.global.name.value }}</v-btn>
 
     </v-main>
   </v-app>
@@ -255,7 +255,7 @@ import { useTheme } from 'vuetify'
 
 import RoundBtn from './RoundBtn.vue';
 
-const debugMode = ref(true)
+const debugMode = ref(false)
 
 const videoFileName = ref('')
 const videoSrc = ref('')
@@ -332,7 +332,7 @@ function toggleTheme() {
 
 watch(selectedNote, (note) => {
   if (note != null) {
-    mdContent.value = marked.parse(embedImage(note.text))
+    mdContent.value = marked.parse(embedImage(note.text), { breaks: true, sanitize: true })
   }
 }, {
   deep: true
@@ -983,6 +983,7 @@ const mdEditorToolbar = [
   'unorderedList',
   'orderedList',
   'task',
+  'link',
   '=', 0
   // 'preview',
   // 'previewOnly',
@@ -1836,10 +1837,18 @@ div#md-content h1 {
 
 .v-theme--light {
   --v-theme-timeline: 230, 230, 230;
+  --md-border: solid;
+  --md-border-color: #ccc;
+  --a-color: #2d8cf0;
+  --bold-color: #000;
 }
 
 .v-theme--dark {
   --v-theme-timeline: 34, 34, 34;
+  --md-border: solid;
+  --md-border-color: #333;
+  --a-color: #e5c07b;
+  --bold-color: #ff7a7a;
 }
 
 .md-editor-dark {
@@ -1853,6 +1862,9 @@ div#md-content h1 {
 .md-display {
   overflow-y: scroll;
   width: 100%;
+  border-style: var(--md-border);
+  border-color: var(--md-border-color);
+  border-width: 1px;
 }
 
 #toggle-theme {
@@ -1890,8 +1902,25 @@ div#md-content h1 {
 
 <!-- 没有 scoped 才能影响 Marked 渲染生成的内容 -->
 <style>
+a {
+  color: var(--a-color);
+}
+
+a:visited {
+  color: var(--a-color);
+}
+
+a:hover {
+  color: var(--a-color);
+}
+
+a:active {
+  color: var(--a-color);
+}
+
+
 #md-editor .cm-line {
-  font-size: 2em;
+  font-size: 1.8em;
   line-height: 1.5;
   height: auto;
   /* margin-top: 6px; */
@@ -1904,28 +1933,34 @@ div#md-content h1 {
 .md-display img {
   max-width: 100%;
   max-height: 400px;
-  /* object-fit: contain; */
 }
 
 .md-display h1 {
-  font-size: 3em;
+  font-size: 2.5em;
   margin-top: 8px;
   margin-bottom: 8px;
-  /* object-fit: contain; */
+}
+
+.md-display h2 {
+  font-size: 2em;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.md-display strong, u, em {
+  color: var(--bold-color);
 }
 
 .md-display p {
   font-size: 1.5em;
   margin-top: 8px;
   margin-bottom: 8px;
-  /* object-fit: contain; */
 }
 
 .md-display p {
   font-size: 1.5em;
   margin-top: 8px;
   margin-bottom: 8px;
-  /* object-fit: contain; */
 }
 
 .md-display li {
@@ -1933,7 +1968,6 @@ div#md-content h1 {
   font-size: 1.5em;
   margin-top: 8px;
   margin-bottom: 8px;
-  /* object-fit: contain; */
 }
 
 .emoji-container .emojis li {

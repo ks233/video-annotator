@@ -81,9 +81,9 @@
 
       <!-- 时间轴 -->
       <v-row>
-        <div id="timeline" ref="videoTimeline" class="mt-n2 flex-grow-1 cursor-move" @wheel.prevent="onTimelineScroll">
-          <v-sheet :height="timelineHeight" @mousedown.left="startDragTimeline" color="rgb(var(--v-theme-timeline))"
-            @click.right.prevent.stop :width="Math.max(windowWidth, videoLength * timeScale)">
+          <v-sheet id="timeline" ref="videoTimeline" class="overflow-visible cursor-move position-relative" @wheel.prevent="onTimelineScroll" :height="timelineHeight"
+            @mousedown.left="startDragTimeline" color="rgb(var(--v-theme-timeline))" @click.right.prevent.stop
+            :width="Math.max(windowWidth, videoLength * timeScale)">
 
             <!-- 表示当前播放时间的线，始终在 timeline 中间 -->
             <v-divider :thickness="3" class="center-line border-opacity-75" vertical color="red-lighten-1"
@@ -100,10 +100,10 @@
             <div class="d-inline-flex timestamp no-select-text" v-for="note in notes" :key="note.id"
               :style="{ 'position': 'absolute', 'left': note.time * timeScale - offsetX + 'px', 'height': timelineHeight + 'px' }">
               <v-divider vertical :thickness="2"></v-divider>
-              <v-card :max-width="250" :min-width="48" class="mx-3 my-8 d-flex align-center px-3 overflow-x-hidden"
-                color="grey-lighten-1" height="36" @click="onTimestampClick($event, note)" style="float:left"
+              <v-card :max-width="250" :min-width="48" class="ml-3 mr-0 my-8 d-flex align-center px-3 text-no-wrap"
+                color="grey-lighten-1" height="36" @click="onTimestampClick($event, note)"
                 @mousedown.left.stop="startDragTimestamp($event, note)"
-                @click.middle.prevent.stop="setNoteToCurrentTime(note)"
+                @click.middle.prevent.stop="setNoteToCurrentTime(note)" @mousedown.middle.prevent
                 @click.right.prevent.stop="deleteNote(note, true)">
                 {{ removeTitle(firstLine(note.text)) }}
               </v-card>
@@ -127,7 +127,6 @@
               </template>
             </template>
           </v-sheet>
-        </div>
       </v-row>
       <v-row class="justify-center mt-5" justify="center">
         <v-col :cols="9">

@@ -254,6 +254,7 @@ import { marked } from 'marked';
 import { useTheme } from 'vuetify'
 
 import RoundBtn from './RoundBtn.vue';
+import DOMPurify from 'dompurify';
 
 const debugMode = ref(false)
 
@@ -332,7 +333,7 @@ function toggleTheme() {
 
 watch(selectedNote, (note) => {
   if (note != null) {
-    mdContent.value = marked.parse(embedImage(note.text), { breaks: true, sanitize: true })
+    mdContent.value = DOMPurify.sanitize(marked.parse(embedImage(note.text), { breaks: true}))
   }
 }, {
   deep: true

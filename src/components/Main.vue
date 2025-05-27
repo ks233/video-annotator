@@ -403,7 +403,7 @@ const metronomeStart = ref(Date.now())
 
 const snapToMarker = ref(false)
 
-onMounted(() => {
+onMounted(async () => {
   player.value = videojs(videoPlayer.value, {
     controls: true,
     controlBar: {
@@ -438,6 +438,7 @@ onMounted(() => {
   player.value.on('play', () => {
     console.log('play')
     isPlaying.value = true
+    seeking.value = false;
     if (useMetronome.value == true) {
       // 触发 seeked 事件，重新对准节拍器
       player.value.currentTime(currentTime.value)
@@ -465,7 +466,7 @@ onMounted(() => {
   })
 
   player.value.on('loadedmetadata', () => {
-    console.log('loadedmetadata',player.value.src())
+    console.log('loadedmetadata', player.value.src())
     videoInfo.value.duration = player.value.duration()
     videoInfo.value.width = player.value.videoWidth() // 油管视频的 width 和 height 都为 0
     videoInfo.value.height = player.value.videoHeight()
@@ -525,8 +526,14 @@ onMounted(() => {
 
   console.log(urlParamNoteSrc, urlParamVideoSrc)
   if (urlParamNoteSrc != null) {
+    if (await getUrlType(urlParamNoteSrc, (o) => { }) == INVALID_URL) {
+      removeQueryString()
+    }
     loadFromURL(urlParamNoteSrc)
   } else if (urlParamVideoSrc != null) {
+    if (await getUrlType(urlParamVideoSrc, (o) => { }) == INVALID_URL) {
+      removeQueryString()
+    }
     loadFromURL(urlParamVideoSrc)
   }
   document.getElementById('my-player').style.setProperty('display', (showVideo.value == true && videoInfo.value != null) ? "inline-block" : "none")
@@ -1016,6 +1023,12 @@ test,test, h![](__foo)aswet
 wasdfasd
     `
   ))
+}
+
+// 删除链接中的 query string 并刷新页面
+function removeQueryString() {
+  window.history.replaceState(null, null, window.location.pathname);
+  window.location.href = '';
 }
 
 // 【添加和删除笔记】

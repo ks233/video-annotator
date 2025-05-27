@@ -34,7 +34,7 @@
           </v-sheet>
         </v-col>
         <!-- Markdown 笔记框 -->
-        <v-col v-show="(!(!editMode && !showVideo))" :cols="4" height="70vh">
+        <v-col v-show="editMode || (showVideo && videoInfo != null)" :cols="4" height="70vh">
           <v-sheet height="70vh" class="d-flex">
             <MdEditor ref="myMdEditor" v-show="editMode" id="md-editor" v-model="selectedNote.text" class="h-100"
               :toolbars="mdEditorToolbar" :preview="false" :theme="theme.global.name.value">

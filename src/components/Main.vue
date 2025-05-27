@@ -24,8 +24,8 @@
                   <polyline :points="polyline.polyString"
                     style="fill:none;stroke:white;stroke-width:8;fill-rule:evenodd;"
                     @mousemove="removeIfErasing(polyline)" />
-                  <polyline :points="polyline.polyString"
-                    style="fill:none;stroke:red;stroke-width:3;fill-rule:evenodd;" />
+                  <polyline :points="polyline.polyString" style="fill:none;stroke:red;stroke-width:3;fill-rule:evenodd;"
+                    @mousemove="removeIfErasing(polyline)" />
                 </template>
               </svg>
             </div>
@@ -166,6 +166,11 @@
             </v-col>
           </v-row>
         </v-col>
+
+        <!-- 提示 -->
+        <v-snackbar v-model="snackbarSaveSuccess" :timeout="2000">
+          💾 Saved: "{{ saveFileName }}".
+        </v-snackbar>
 
         <!-- BPM 与偏移量调整 -->
         <v-col :cols="3">
@@ -627,6 +632,9 @@ function drawing(event) {
 }
 
 function finishDrawing(event) {
+  if (polylineDrawing.value.points.length <= 1) {
+    selectedNote.value.polylines = selectedNote.value.polylines.filter(p => p != polylineDrawing.value)
+  }
   isDrawing.value = false
 }
 
@@ -636,6 +644,7 @@ function removeIfErasing(polyline) {
   if (!isErasing.value) return;
   selectedNote.value.polylines = selectedNote.value.polylines.filter(p => p != polyline)
 }
+
 
 //【全局事件】
 
@@ -1432,6 +1441,8 @@ function toHHMMSS(num) {
 
 // 【文件的读取和保存】
 
+const snackbarSaveSuccess = ref(false)
+
 /**
  * @param {File} file
  */
@@ -1451,6 +1462,10 @@ function download(content, fileName, contentType) {
   a.download = fileName;
   a.click();
 }
+
+const saveFileName = computed(() => {
+  return videoInfo.value == null ? 'Note.txt' : videoInfo.value.filename + '.txt'
+})
 
 async function saveNoteJSON() {
   let saveData = makeSaveData()
@@ -1472,12 +1487,9 @@ async function saveNoteJSON() {
     const writable = await noteFileHandle.value.createWritable();
     await writable.write(json);
     await writable.close();
+    snackbarSaveSuccess.value = true
   } else {
-    if (videoInfo.value != null) {
-      download(json, videoInfo.value.filename + '.txt', 'text/plain');
-    } else {
-      download(json, 'Note.txt', 'text/plain');
-    }
+    download(json, saveFileName.value, 'text/plain');
   }
 }
 

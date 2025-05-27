@@ -435,10 +435,6 @@ onMounted(() => {
     isPlaying.value = false
     seeking.value = false
   })
-  player.value.on('resize', () => {
-    videoInfo.value.width = player.value.videoWidth()
-    videoInfo.value.height = player.value.videoHeight()
-  })
   player.value.on('play', () => {
     console.log('play')
     isPlaying.value = true
@@ -456,7 +452,6 @@ onMounted(() => {
     console.log('sourceset')
     player.value.pause()
     isPlaying.value = false
-    videoInfo.value.duration = player.value.duration()
   })
   // 油管速度到三倍速的时候不会触发
   player.value.on('ratechange', () => {
@@ -467,6 +462,14 @@ onMounted(() => {
       // 只有在 seeked 事件里更新 metronome 才准，直接在其它地方更新会有延迟，太怪了
       player.value.currentTime(currentTime.value)
     }
+  })
+
+  player.value.on('loadedmetadata', () => {
+    console.log('loadedmetadata',player.value.src())
+    videoInfo.value.duration = player.value.duration()
+    videoInfo.value.width = player.value.videoWidth() // 油管视频的 width 和 height 都为 0
+    videoInfo.value.height = player.value.videoHeight()
+    console.log(videoInfo.value)
   })
 
   updateWindowSize()
@@ -1266,7 +1269,6 @@ function onPlayerTimeUpdate() {
   if (draggingTimeline.value) return;
   if (seeking.value) return;
   currentTime.value = player.value.currentTime()
-  videoInfo.value.duration = player.value.duration()
   offsetX.value = timeToOffset(currentTime.value);
   selectNoteByCurrentTime()
 }

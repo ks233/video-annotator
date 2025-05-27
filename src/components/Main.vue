@@ -1849,7 +1849,7 @@ div#md-content h1 {
   --md-border: solid;
   --md-border-color: #333;
   --a-color: #e5c07b;
-  --bold-color: #ff7a7a;
+  --bold-color: #ec8c5f;
 }
 
 .md-editor-dark {
@@ -1944,7 +1944,13 @@ a:active {
 
 .md-display h2 {
   font-size: 2em;
-  margin-top: 8px;
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+
+.md-display h3 {
+  font-size: 1.6em;
+  margin-top: 16px;
   margin-bottom: 8px;
 }
 

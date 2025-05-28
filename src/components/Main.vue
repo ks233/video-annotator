@@ -1300,6 +1300,8 @@ function seekPreviousNote() {
   else {
     seek(0)
   }
+  selectNoteByCurrentTime()
+
 }
 
 function seekNextNote() {
@@ -1310,6 +1312,7 @@ function seekNextNote() {
   else {
     seek(videoLength.value)
   }
+  selectNoteByCurrentTime()
 }
 
 /**

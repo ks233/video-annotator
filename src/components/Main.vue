@@ -485,8 +485,8 @@ onMounted(async () => {
   })
   player.value.on('seeked', () => {
     console.log('seeked')
+    updateCurrentTime()
     seeking.value = false
-    updateMetronomeStart()
   })
   player.value.on('sourceset', () => {
     console.log('sourceset')
@@ -1352,15 +1352,14 @@ function realVideoTimer() {
   if (draggingTimeline.value) return;
   if (seeking.value) return;
   if (videoInfo.value == null) return;
-  currentTime.value = player.value.currentTime()
-  offsetX.value = timeToOffset(currentTime.value);
+  if (player.value.paused()) return;
+  updateCurrentTime()
   selectNoteByCurrentTime()
 }
 
-function updateMetronomeStart() {
-  let spd = currentSpeed.value
-  metronomeStart.value = Date.now() - (currentTime.value / currentSpeed.value) * 1000
-  console.log(currentSpeed.value)
+function updateCurrentTime() {
+  currentTime.value = player.value.currentTime()
+  offsetX.value = timeToOffset(currentTime.value);
 }
 
 /**
@@ -1388,7 +1387,6 @@ function play() {
       pauseFake()
     } else {
       playFake()
-      updateMetronomeStart()
     }
   }
 }
@@ -1410,7 +1408,6 @@ function seek(time) {
   } else {
     currentTime.value = time.clamp(0, videoLength.value)
     offsetX.value = timeToOffset(currentTime.value)
-    updateMetronomeStart()
   }
 }
 

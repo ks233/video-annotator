@@ -189,8 +189,8 @@
             <v-col :cols="3" class="d-flex flex-column align-end">
               <v-btn @mousedown.prevent @click="toggleMetronome" class="mx-1 my-2" icon="mdi-metronome"
                 :color="useMetronome ? 'blue-lighten-1' : '--v-theme-surface'"></v-btn>
-              <v-btn @mousedown.prevent @click="snapToMarker = !snapToMarker" class="mx-1" icon="mdi-magnet"
-                :color="snapToMarker ? 'pink-lighten-1' : '--v-theme-surface'"></v-btn>
+              <v-btn @mousedown.prevent @click="snapToMarker = !snapToMarker" @click.right.prevent="quantizeNotes"
+                class="mx-1" icon="mdi-magnet" :color="snapToMarker ? 'pink-lighten-1' : '--v-theme-surface'"></v-btn>
             </v-col>
             <v-col :cols="8" class="mt-5">
               <v-row>
@@ -200,7 +200,7 @@
                   :max="20"></v-number-input>
               </v-row>
               <v-row class="w-100 my-0">
-                <v-slider class="ml-0 mr-n6" label="Offset" v-model="tlMarkerOffset" :min="0"
+                <v-slider class="ml-0 mr-n6" label="Offset" v-model="tlMarkerOffset" step="0.02" :min="0"
                   :max="tlMarkerBeat"></v-slider>
               </v-row>
             </v-col>
@@ -233,7 +233,7 @@
       </v-dialog>
 
       <!-- 一些 debug 用的信息 -->
-      <v-row v-if="debugMode" class="px-6">
+      <v-row v-if="false" class="px-6">
         <v-btn @click="debug()">debug</v-btn>
         <!-- {{ offsetX }} / {{ windowWidth }} / {{ tlMarkerDensity }} / {{ tlBigMarkerDensity }} / {{ tlBigMarkerCull }}<br>
         timescale: {{ timeScale }} / showVideo {{ showVideo }} {{ mdContent }}<br>
@@ -267,11 +267,30 @@ import { useTheme } from 'vuetify'
 import RoundBtn from './RoundBtn.vue';
 import DOMPurify from 'dompurify';
 
-const debugMode = ref(false)
-
-const videoFileName = ref('')
-const videoSrc = ref('')
-
+function quantizeNotes() {
+  const notesTimeBefore = Object.fromEntries(notes.value.map(note => [note.id, note.time]))
+  const notesTimeAfter = Object.fromEntries(notes.value.map(note => {
+    let nearestMarker = Math.round(note.time / tlMarkerInterval.value - tlMarkerOffset.value)
+    let newTime = (nearestMarker + tlMarkerOffset.value) * tlMarkerInterval.value
+    return [note.id, newTime]
+  }))
+  console.log(notesTimeBefore)
+  const command = {
+    undo: () => {
+      for (const [id, time] of Object.entries(notesTimeBefore)) {
+        setNoteTimeByID(id, time)
+      }
+      sortNotes()
+    }, redo: () => {
+      for (const [id, time] of Object.entries(notesTimeAfter)) {
+        setNoteTimeByID(id, time)
+      }
+      sortNotes()
+    }
+  }
+  command.redo()
+  registerCmd(command)
+}
 
 const videoPlayer = ref(null)
 const player = ref(null)
@@ -453,19 +472,18 @@ onMounted(async () => {
   //   onPlayerTimeUpdate()
   // })
   // videojs 的 updatetime 事件触发频率太低了，不如直接开个计时器
-  setInterval(() => {
-    if (videoInfo.value != null) {
-      onPlayerTimeUpdate()
-    }
-  }, 10); // 每 5ms 更新一下计时器
+
+  let updateTimeIntervalID = 0
   player.value.on('pause', () => {
     isPlaying.value = false
     seeking.value = false
+    clearInterval(updateTimeIntervalID);
   })
   player.value.on('play', () => {
     console.log('play')
     isPlaying.value = true
     seeking.value = false;
+    updateTimeIntervalID = setInterval(realVideoTimer, 10);
     if (useMetronome.value == true) {
       // 触发 seeked 事件，重新对准节拍器
       player.value.currentTime(currentTime.value)
@@ -904,7 +922,10 @@ function startRegisterMove(note) {
   let time = note.time
   let id = note.id
   moveCmd = {
-    undo: () => setNoteTimeByID(id, time),
+    undo: () => {
+      setNoteTimeByID(id, time)
+      sortNotes()
+    },
     redo: null
   }
 }
@@ -916,7 +937,10 @@ function startRegisterMove(note) {
 function finishRegisterMove(note) {
   let time = note.time
   let id = note.id
-  moveCmd.redo = () => setNoteTimeByID(id, time)
+  moveCmd.redo = () => {
+    setNoteTimeByID(id, time)
+    sortNotes()
+  }
   registerCmd(moveCmd)
 }
 
@@ -989,7 +1013,6 @@ function setNoteTimeByID(id, time) {
   if (note) {
     note.time = time
   }
-  sortNotes()
 }
 
 import { Emoji } from '@vavt/v3-extension'
@@ -1084,12 +1107,16 @@ function addMinorNote() {
 
 function chordTool() {
   let input = prompt("Chord Tool")
-  let chords = input.split(" ")
-  let nextBeat = Math.ceil(currentTime.value / tlMarkerInterval.value - tlMarkerOffset.value)
+  if (!input) return;
+  // A,,B,,,,
+  let chords = input.split(",")
+  let nextBeat = Math.round(currentTime.value / tlMarkerInterval.value - tlMarkerOffset.value)
   let nextBeatTime = (nextBeat + tlMarkerOffset.value) * tlMarkerInterval.value
   for (let i = 0; i < chords.length; i++) {
-    addNote(new Note(nextBeatTime, "# 🎹 " + chords[i]), true)
-    nextBeatTime += tlMarkerInterval.value * tlMarkerBeat.value
+    if (chords[i] != '') {
+      addNote(new Note(nextBeatTime, "# 🎹 " + chords[i]), true)
+    }
+    nextBeatTime += tlMarkerInterval.value * tlMarkerBeat.value / 2
   }
 }
 
@@ -1235,7 +1262,7 @@ function dragTimestamp(event) {
   let delta = event.clientX - startDragXTs;
   // videoTimeline.value.scrollLeft += delta;
   if (snapToMarker.value) {
-    let targetMarker = Math.round((offsetToTime(timestampOffsetX.value + delta) + currentTime.value - startDragTimeTs - tlMarkerOffset.value * tlMarkerInterval.value) / tlMarkerInterval.value)
+    let targetMarker = Math.round((offsetToTime(timestampOffsetX.value + delta) + currentTime.value - startDragTimeTs) / tlMarkerInterval.value - tlMarkerOffset.value)
     let newTime = (targetMarker + tlMarkerOffset.value) * tlMarkerInterval.value
     draggedNote.value.time = newTime.clamp(0, videoLength.value)
   } else {
@@ -1267,7 +1294,13 @@ function setNoteToCurrentTime(note) {
 }
 
 function sortNotes() {
-  notes.value.sort((a, b) => a.time - b.time)
+  notes.value.sort((a, b) => {
+    if (a.time == b.time) {
+      return (isMinorNote(a) ? 0 : 1) - (isMinorNote(b) ? 0 : 1)
+    }
+    return a.time - b.time
+  }
+  )
   console.log('sort')
 }
 
@@ -1327,9 +1360,10 @@ function timeToOffset(time) {
   return -windowWidth.value / 2 + time * timeScale.value
 }
 
-function onPlayerTimeUpdate() {
+function realVideoTimer() {
   if (draggingTimeline.value) return;
   if (seeking.value) return;
+  if (videoInfo.value == null) return;
   currentTime.value = player.value.currentTime()
   offsetX.value = timeToOffset(currentTime.value);
   selectNoteByCurrentTime()
@@ -1829,7 +1863,6 @@ function loadSaveData(saveData) {
     if (!saveData.videoInfo.isLocal)
       loadFromURL(saveData.videoInfo.src)
   }
-
   saveData.notes.forEach(note => {
     Object.setPrototypeOf(note, Note.prototype)
     if (note.polylines != null) {

@@ -467,7 +467,7 @@ onMounted(async () => {
     }
   })
 
-
+  setInterval(realVideoTimer, 5);
   // player.value.on('timeupdate', () => {
   //   onPlayerTimeUpdate()
   // })
@@ -477,17 +477,11 @@ onMounted(async () => {
   player.value.on('pause', () => {
     isPlaying.value = false
     seeking.value = false
-    clearInterval(updateTimeIntervalID);
   })
   player.value.on('play', () => {
     console.log('play')
     isPlaying.value = true
     seeking.value = false;
-    updateTimeIntervalID = setInterval(realVideoTimer, 10);
-    if (useMetronome.value == true) {
-      // 触发 seeked 事件，重新对准节拍器
-      player.value.currentTime(currentTime.value)
-    }
   })
   player.value.on('seeked', () => {
     console.log('seeked')
@@ -503,11 +497,6 @@ onMounted(async () => {
   player.value.on('ratechange', () => {
     console.log('ratechange')
     currentSpeedIndex.value = speedList.findIndex(n => n == player.value.playbackRate())
-    if (useMetronome.value == true) {
-      // 触发 seeked 事件，重新对准节拍器
-      // 只有在 seeked 事件里更新 metronome 才准，直接在其它地方更新会有延迟，太怪了
-      player.value.currentTime(currentTime.value)
-    }
   })
 
   player.value.on('loadedmetadata', () => {
@@ -540,17 +529,16 @@ onMounted(async () => {
   let nextBeatTime = 0
   // 节拍器计时器，一直在跑，不知道对性能有多大影响，目前好像不太卡
   setInterval(() => {
-    delta = (Date.now() - metronomeStart.value) / 1000 - tlMarkerOffset.value * tlMarkerIntervalStretched.value - 0.015; // 往前偏移一丢丢，不然第一拍不响
-    // delta = player.value.currentTime() - tlMarkerOffset.value * tlMarkerIntervalStretched.value - 0.01;
-    nextBeat = Math.ceil(prevTime / tlMarkerIntervalStretched.value)
-    nextBeatTime = nextBeat * tlMarkerIntervalStretched.value
+    delta = currentTime.value - tlMarkerOffset.value * tlMarkerInterval.value;
+    nextBeat = Math.ceil(prevTime / tlMarkerInterval.value)
+    nextBeatTime = nextBeat * tlMarkerInterval.value
     if (delta > nextBeatTime) {
       if (useMetronome.value && isPlaying.value) {
         playMetronome(nextBeat % tlMarkerBeat.value == 0)
       }
     }
     prevTime = delta
-  }, 10);
+  }, 5);
 
   // Check to see if Media-Queries are supported
   if (window.matchMedia) {
@@ -1385,9 +1373,6 @@ function playMetronome(firstBeat) {
 
 function toggleMetronome() {
   useMetronome.value = !useMetronome.value
-  if (useMetronome.value == true) {
-    seek(currentTime.value)
-  }
 }
 
 

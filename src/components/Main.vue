@@ -820,6 +820,8 @@ const keyX = keys['x']
 const keyC = keys['c']
 const keyShift = keys['shift']
 const keyCtrl = keys['ctrl']
+const keyUp = keys['up']
+const keyDown = keys['down']
 
 // Z, Ctrl-Z, Ctrl-Shift-Z
 whenever(logicAnd(keyZ, notUsingInput), (v) => {
@@ -837,6 +839,16 @@ whenever(logicAnd(keyZ, notUsingInput), (v) => {
     storedSpeedIndex.value = currentSpeedIndex.value
     currentSpeedIndex.value = defaultSpeedIndex
   }
+})
+
+whenever(logicAnd(keyUp, notUsingInput), (v) => {
+  player.value.volume(player.value.volume() + 0.1)
+  console.log(player.value.volume())
+})
+
+
+whenever(logicAnd(keyDown, notUsingInput), (v) => {
+  player.value.volume(player.value.volume() - 0.1)
 })
 
 whenever(logicAnd(keyX, notUsingInput), (v) => {

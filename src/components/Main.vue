@@ -1634,7 +1634,7 @@ const snackbarSaveSuccess = ref(false)
 function loadLocalFile(file) {
   if (file.type == "text/plain") {
     loadLocalJSON(file)
-  } else if (file.type.startsWith("video")) {
+  } else if (file.type.startsWith("video") || file.type.startsWith("audio")) {
     console.log('video', file)
     if (videoLoaded.value) {
       reset()

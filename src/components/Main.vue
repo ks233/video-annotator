@@ -15,7 +15,7 @@
         <v-col>
           <v-sheet class="d-flex" height="65vh" :elevation="2" style="position: relative">
             <!-- 叠在视频上方的绘图层 -->
-            <div id="drawing-layer" v-show="showVideo && videoInfo != null" ref="drawingLayer" class="no-select-text"
+            <div id="drawing-layer" v-show="showVideo && videoLoaded" ref="drawingLayer" class="no-select-text"
               :class="keyCtrl && polylineDrawable ? 'drawing' : ''">
               <svg width="100%" height="100%" style="justify-content: center;" @mousedown.left="startDrawing"
                 @mousemove="drawing" @mousedown.right="isErasing = true" @mouseup.right="isErasing = false"
@@ -30,7 +30,7 @@
               </svg>
             </div>
             <video ref="videoPlayer" id="my-player" class="video-js"></video>
-            <div class="md-display pa-10" v-if="!showVideo || videoInfo == null" v-html="mdContent"></div>
+            <div class="md-display pa-10" v-if="!showVideo || !videoLoaded" v-html="mdContent"></div>
           </v-sheet>
         </v-col>
         <!-- Markdown 笔记框 -->
@@ -50,7 +50,7 @@
       <!-- 显示当前时间 -->
       <v-row class="mt-1">
         <v-col class="pt-0 pl-7">
-          <template v-if="videoInfo == null">No Video</template>
+          <template v-if="!videoLoaded">No Video</template>
           <template v-else>
             <template v-if="!videoInfo.isLocal">
               <a :href="videoInfo.src"> {{ videoInfo.filename }}</a>
@@ -320,19 +320,23 @@ const videoInfo = ref(null)
 const fakeVideoLength = ref(273)
 const fakeStartTime = ref(0)
 let prevFakeTime = 0
-let fakeTimerId = null
+let fakeTimerID = null
 function playFake() {
   prevFakeTime = audioCtx.currentTime
   isPlaying.value = true;
-  fakeTimerId = setInterval(fakeVideoTimer, 10);
+  fakeTimerID = setInterval(fakeVideoTimer, 10);
   updateNextBeatTime()
 }
 function pauseFake() {
-  clearInterval(fakeTimerId);
+  clearInterval(fakeTimerID);
   isPlaying.value = false;
 }
 
 function fakeVideoTimer() {
+  if (currentTime.value > videoLength.value) {
+    pauseFake()
+    return
+  }
   if (draggingTimeline.value) return;
   let deltaTime = audioCtx.currentTime - prevFakeTime;
   currentTime.value += deltaTime * currentSpeed.value
@@ -436,10 +440,10 @@ const showVideo = ref(true)
 
 // 控制播放器隐藏和显示，感觉太啰嗦了，但没找到别的方法
 watch(showVideo, (v) => {
-  document.getElementById('my-player').style.setProperty('display', (v && videoInfo.value != null) ? "inline-block" : "none")
+  document.getElementById('my-player').style.setProperty('display', (v && videoLoaded.value) ? "inline-block" : "none")
 })
-watch(videoInfo, (v) => {
-  document.getElementById('my-player').style.setProperty('display', (showVideo.value && v != null) ? "inline-block" : "none")
+watch(videoLoaded, (v) => {
+  document.getElementById('my-player').style.setProperty('display', (showVideo.value && v) ? "inline-block" : "none")
 })
 
 const useMetronome = ref(false)
@@ -741,8 +745,9 @@ const noteFileHandle = ref(null)
  */
 async function dropFile(event) {
   const items = event.dataTransfer.items;
+  let loadedFileCount = 0
   Array.from(event.dataTransfer.files).forEach(file => {
-    loadFile(file)
+    loadLocalFile(file)
   });
   event.preventDefault()
   // 如果浏览器支持使用 FileSystemHandle，记录笔记文件的 handle，以便保存时直接保存到原文件中
@@ -1072,7 +1077,9 @@ test,test, h![](__foo)aswet
 wasdfasd
     `
   ))
-  console.log(player.value.currentTime())
+  reset()
+  // console.log(player.value.currentSrc())
+  // player.value.src(undefined)
 }
 
 // 删除链接中的 query string 并刷新页面
@@ -1370,7 +1377,7 @@ function timeToOffset(time) {
 function realVideoTimer() {
   if (draggingTimeline.value) return;
   if (seeking.value) return;
-  if (videoInfo.value == null) return;
+  if (videoLoaded.value == false) return;
   if (player.value.paused()) return;
   updateCurrentTime()
   selectNoteByCurrentTime()
@@ -1453,7 +1460,7 @@ function updateNextBeatTime() {
 }
 
 function play() {
-  if (videoInfo.value) {
+  if (videoLoaded.value) {
     if (player.value.paused()) {
       player.value.play();
     } else {
@@ -1624,12 +1631,16 @@ const snackbarSaveSuccess = ref(false)
 /**
  * @param {File} file
  */
-function loadFile(file) {
+function loadLocalFile(file) {
   if (file.type == "text/plain") {
-    loadNoteJSON(file)
-  } else {
-    console.log(file)
+    loadLocalJSON(file)
+  } else if (file.type.startsWith("video")) {
+    console.log('video', file)
+    if (videoLoaded.value) {
+      reset()
+    }
     loadLocalVideo(file)
+    videoLoaded.value = true
   }
 }
 
@@ -1674,7 +1685,7 @@ async function saveNoteJSON() {
 /**
  * @param {File} file
  */
-function loadNoteJSON(file) {
+function loadLocalJSON(file) {
   var reader = new FileReader();
   reader.onload = event => {
     var saveData = JSON.parse(event.target.result);
@@ -1795,8 +1806,10 @@ async function loadFromURL(url) {
   })
   if (type == V_YOUTUBE) {
     loadYoutubeVideo(url)
+    videoLoaded.value = true
   } else if (type == V_HTML5) {
     loadHtmlVideo(url)
+    videoLoaded.value = true
   }
   selectNoteByCurrentTime()
 }
@@ -1809,7 +1822,7 @@ function loadFromFileInput() {
 
 function onFileInputBox(event) {
   for (const file of event.target.files) {
-    loadFile(file)
+    loadLocalFile(file)
   }
 }
 
@@ -1879,11 +1892,15 @@ function reset() {
   noteFileHandle.value = null
   // 暂停
   player.value.pause()
+  pauseFake()
   seek(0)
   // 清空撤销队列
   clearCommandStack()
+  videoInfo.value = null
   notes.value = []
   selectedNote.value = new Note(0, '')
+  imageDatabase.value = {}
+  videoLoaded.value = false
 }
 
 function makeSaveData() {
@@ -1912,7 +1929,6 @@ function loadSaveData(saveData) {
   tlMarkerOffset.value = saveData.markers.offset
   imageDatabase.value = saveData.imageDatabase ?? imageDatabase.value
   showVideo.value = saveData.showVideo ?? showVideo.value
-  console.log(saveData.editMode)
   editMode.value = saveData.editMode ?? editMode.value
 
   videoInfo.value = saveData.videoInfo

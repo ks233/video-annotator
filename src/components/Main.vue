@@ -482,7 +482,6 @@ onMounted(async () => {
   // })
   // videojs 的 updatetime 事件触发频率太低了，不如直接开个计时器
 
-  let updateTimeIntervalID = 0
   player.value.on('pause', () => {
     isPlaying.value = false
     seeking.value = false
@@ -1426,10 +1425,9 @@ function playMetronome(firstBeat, time) {
 function toggleMetronome() {
   useMetronome.value = !useMetronome.value
   if (useMetronome.value) {
-    updateNextBeatTime()
-    metronomeSchedule()
-  } else {
     metronomeTimerID = setTimeout(metronomeSchedule, 25)
+  } else {
+    clearTimeout(metronomeTimerID)
   }
 }
 
@@ -1452,7 +1450,7 @@ function updateNextBeatTime() {
   let interval = tlMarkerInterval.value
   let intervalStretched = tlMarkerIntervalStretched.value
   let offset = tlMarkerOffset.value
-  nextBeatCount = Math.floor(timeP / interval + offset)
+  nextBeatCount = Math.ceil(timeP / interval + offset)
   nextBeatTime = timeA + (nextBeatCount + offset) * intervalStretched - timePStretched
   if (useMetronome.value) {
     metronomeTimerID = setTimeout(metronomeSchedule, 25)
@@ -1460,6 +1458,7 @@ function updateNextBeatTime() {
 }
 
 function play() {
+  audioCtx.resume()
   if (videoLoaded.value) {
     if (player.value.paused()) {
       player.value.play();

@@ -60,5 +60,5 @@ export default defineConfig({
       },
     },
   },
-  base: 'https://ks233.github.io/video-annotator/',
+  base: '/video-annotator',
 })

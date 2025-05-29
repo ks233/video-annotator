@@ -1,49 +1,39 @@
-# KS 的时间轴笔记工具
-
-https://ks233.github.io/video-annotator/
-
-视频笔记 / 录像复盘 / 音乐分析 / 影视拉片
+<h1 align="center">KS 的时间轴笔记工具</h1>
+<div align="center">
+    <strong>▶️ 纯前端实现，轻便实用的本地媒体笔记工具</strong>
+</div> 
+<h3 align="center">
+    <a href="http://ks233.github.io/video-annotator/">开始使用</a>
+    <span> • </span>
+    <a href="http://ks233.github.io/video-annotator/?n=https://raw.githubusercontent.com/ks233/va-example/refs/heads/main/Introduction.txt">DEMO</a>
+    <span> • </span>
+    <a href="https://github.com/ks233/video-annotator/issues">BUG 反馈</a>
+</h3>
+<div align="center">
+    <a href="https://github.com/ks233/video-annotator">
+        <img src="README/2025-05-27-19-56-21-image.png" alt="Title" >
+    </a>
+</div>
 
 ## 主要特性
 
 - 在时间轴上标记重点，准确定位，随时跳转。
-
 - 用 Markdown 做笔记，保存为单个 JSON 文件，非常轻便。
-
 - 能直接在画面上绘制线条，圈画关键点。
-
 - 内置节拍器、拍点吸附等功能，便于分析音乐。
-
 - 纯前端，一切发生在本地，没有隐私顾虑。
 
 ## 使用方式
 
 这个工具非常简单直观，操作基本上就是点击、拖拽，按钮看图标点两下就能知道用途。
 
-如果你正在使用电脑浏览器，可以直接查看这个[示例笔记](https://ks233.github.io/video-annotator/?n=https://raw.githubusercontent.com/ks233/va-example/refs/heads/main/Introduction.txt)。整个界面差不多长这样：
-
-![](README/2025-05-27-19-56-21-image.png)
-
-### 播放器快捷键
-
-- 空格：播放 / 暂停
-
-- 左右：前进 / 后退 5s
-
-- 上下：音量 +10% / -10%
-
-- `X` 减速，`C` 加速，`Z` 切换原速和变速
-
-- `D` 上一帧，`F` 下一帧
+如果你正在使用电脑浏览器，可以直接查看这个[示例笔记](https://ks233.github.io/video-annotator/?n=https://raw.githubusercontent.com/ks233/va-example/refs/heads/main/Introduction.txt)。
 
 ### 时间轴操作
 
 - 左键拖拽平移时间轴，滚动滚轮缩放时间轴。
-
 - 左键点击笔记跳转到笔记所在的时间（也可以用左侧的笔记列表跳转）。
-
 - 左键拖拽调整笔记位置。
-
 - 中键点击笔记移动到当前时间。
 
 ![](README/middle_click_note.gif)
@@ -51,6 +41,14 @@ https://ks233.github.io/video-annotator/
 - 右键点击笔记将其删除。所有移动和删除都可以用 `Ctrl-Z` 撤销，`Ctrl-Shift-Z` 重做。
 
 ![](README/delete_note_and_undo.gif)
+
+### 播放器快捷键
+
+- 空格：播放 / 暂停
+- 左右：前进 / 后退 5s
+- 上下：音量 +10% / -10%
+- `X` 减速，`C` 加速，`Z` 切换原速和变速
+- `D` 上一帧，`F` 下一帧
 
 ### 载入与保存文件
 
@@ -95,9 +93,7 @@ https://ks233.github.io/video-annotator/
 ![](README/2025-05-27-18-22-22-image.png)
 
 - BPM：节拍器的速度，也是时间轴上刻度线的密度。
-
 - Beat：一小节的拍数，每小节的第一拍的刻度线稍长一些，节拍器的音效也不同。
-
 - Offset：音乐不一定从第 0 秒开始，所以需要调整偏移量，最多偏移一整个小节。
 
 调整好以上参数，打开节拍器并播放视频，节拍器就能正确地对准音乐节奏。
@@ -124,7 +120,7 @@ https://ks233.github.io/video-annotator/
 
 这实在是太蛋疼了，于是我决定自己搓一个。
 
-#### 时间轴
+### 时间轴
 
 本项目的时间轴基本模仿了播客平台[机核](https://www.gcores.com/)的网页端播放器：
 
@@ -137,13 +133,9 @@ https://ks233.github.io/video-annotator/
 ### 使用的工具与第三方库
 
 - 前端框架：Vue + Vuetify + Vueuse
-
 - 视频框架：[videojs](https://github.com/videojs/video.js) 和 [videojs-youtube](https://github.com/videojs/videojs-youtube)
-
 - Markdown 编辑器：[imzbf/md-editor-v3](https://github.com/imzbf/md-editor-v3)
-
 - Markdown 渲染：[markedjs/marked](https://github.com/markedjs/marked)、[cure53/DOMPurify](https://github.com/cure53/DOMPurify)
-
 - [ai/nanoid](https://github.com/ai/nanoid)
 
 ## 已知问题

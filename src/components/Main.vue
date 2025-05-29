@@ -195,13 +195,13 @@
             <v-col :cols="8" class="mt-5">
               <v-row>
                 <v-number-input class="w-25" v-model="tlMarkerBPM" label="BPM" control-variant="stacked" :min="30"
-                  :max="300" :precision="2"></v-number-input>
+                  :max="300" :precision="2" @update:model-value="updateNextBeatTime()"></v-number-input>
                 <v-number-input class="w-25" v-model="tlMarkerBeat" label="Beat" control-variant="stacked" :min="1"
                   :max="20"></v-number-input>
               </v-row>
               <v-row class="w-100 my-0">
                 <v-slider class="ml-0 mr-n6" label="Offset" v-model="tlMarkerOffset" step="0.02" :min="0"
-                  :max="tlMarkerBeat"></v-slider>
+                  :max="tlMarkerBeat" @update:model-value="updateNextBeatTime()"></v-slider>
               </v-row>
             </v-col>
           </v-row>
@@ -319,11 +319,13 @@ const videoInfo = ref(null)
 
 const fakeVideoLength = ref(273)
 const fakeStartTime = ref(0)
+let prevFakeTime = 0
 let fakeTimerId = null
 function playFake() {
-  fakeStartTime.value = Date.now() / 1000 - currentTime.value
+  prevFakeTime = audioCtx.currentTime
   isPlaying.value = true;
   fakeTimerId = setInterval(fakeVideoTimer, 10);
+  updateNextBeatTime()
 }
 function pauseFake() {
   clearInterval(fakeTimerId);
@@ -332,8 +334,10 @@ function pauseFake() {
 
 function fakeVideoTimer() {
   if (draggingTimeline.value) return;
-  currentTime.value = Date.now() / 1000 - fakeStartTime.value
+  let deltaTime = audioCtx.currentTime - prevFakeTime;
+  currentTime.value += deltaTime * currentSpeed.value
   offsetX.value = timeToOffset(currentTime.value);
+  prevFakeTime = audioCtx.currentTime
   selectNoteByCurrentTime()
 }
 
@@ -439,7 +443,7 @@ watch(videoInfo, (v) => {
 })
 
 const useMetronome = ref(false)
-const metronomeStart = ref(Date.now())
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
 const snapToMarker = ref(false)
 
@@ -467,6 +471,7 @@ onMounted(async () => {
     }
   })
 
+  loadMetronomeSounds()
   setInterval(realVideoTimer, 5);
   // player.value.on('timeupdate', () => {
   //   onPlayerTimeUpdate()
@@ -480,12 +485,18 @@ onMounted(async () => {
   })
   player.value.on('play', () => {
     console.log('play')
+    updateNextBeatTime()
     isPlaying.value = true
     seeking.value = false;
+    if (useMetronome.value == true) {
+      // 触发 seeked 事件，重新对准节拍器
+      player.value.currentTime(currentTime.value)
+    }
   })
   player.value.on('seeked', () => {
     console.log('seeked')
     updateCurrentTime()
+    updateNextBeatTime()
     seeking.value = false
   })
   player.value.on('sourceset', () => {
@@ -496,7 +507,12 @@ onMounted(async () => {
   // 油管速度到三倍速的时候不会触发
   player.value.on('ratechange', () => {
     console.log('ratechange')
+    // updateNextBeatTime()
     currentSpeedIndex.value = speedList.findIndex(n => n == player.value.playbackRate())
+    if (useMetronome.value == true) {
+      // 触发 seeked 事件，重新对准节拍器
+      player.value.currentTime(currentTime.value)
+    }
   })
 
   player.value.on('loadedmetadata', () => {
@@ -522,23 +538,8 @@ onMounted(async () => {
   document.addEventListener('mousemove', globalMouseMove);
   document.addEventListener('mouseup', globalMouseUp);
   document.addEventListener('paste', pasteImage);
-  // 节拍器设置
-  let prevTime = 0
-  let delta = 0
-  let nextBeat = 0
-  let nextBeatTime = 0
-  // 节拍器计时器，一直在跑，不知道对性能有多大影响，目前好像不太卡
-  setInterval(() => {
-    delta = currentTime.value - tlMarkerOffset.value * tlMarkerInterval.value;
-    nextBeat = Math.ceil(prevTime / tlMarkerInterval.value)
-    nextBeatTime = nextBeat * tlMarkerInterval.value
-    if (delta > nextBeatTime) {
-      if (useMetronome.value && isPlaying.value) {
-        playMetronome(nextBeat % tlMarkerBeat.value == 0)
-      }
-    }
-    prevTime = delta
-  }, 5);
+
+
 
   // Check to see if Media-Queries are supported
   if (window.matchMedia) {
@@ -808,9 +809,9 @@ const storedSpeedIndex = ref(4)
 
 const currentSpeed = computed(() => speedList[currentSpeedIndex.value])
 
-// watch(currentSpeed, (v) => {
-//   updateMetronomeStart()
-// })
+watch(currentSpeed, (v) => {
+  fakeStartTime.value = audioCtx.currentTime - currentTime.value * currentSpeed.value
+})
 
 // Z X C 变速，和 PotPlayer 类似
 // Ctrl-Z 撤销，Ctrl-Shift-Z 重做
@@ -1071,6 +1072,7 @@ test,test, h![](__foo)aswet
 wasdfasd
     `
   ))
+  console.log(player.value.currentTime())
 }
 
 // 删除链接中的 query string 并刷新页面
@@ -1223,8 +1225,10 @@ function finishDragTimeline(event) {
   if (!draggingTimeline.value) return;
   draggingTimeline.value = false
   seek(offsetToTime(offsetX.value))
-  fakeStartTime.value = Date.now() / 1000 - currentTime.value
+  prevFakeTime = audioCtx.currentTime
   selectNoteByCurrentTime()
+  updateNextBeatTime()
+
 }
 
 // 拖拽时间戳
@@ -1377,18 +1381,76 @@ function updateCurrentTime() {
   offsetX.value = timeToOffset(currentTime.value);
 }
 
+// 【节拍器】
+
 /**
  * @param {Boolean} firstBeat 是否为第一拍
  */
-function playMetronome(firstBeat) {
-  var audio = new Audio(firstBeat ? 'metronome_up.wav' : 'metronome_down.wav');
-  audio.play();
+let metronomeTimerID = 0
+let nextBeatCount = 0
+let nextBeatTime = 0
+
+let metronomeUpBuffer = null;
+let metronomeDownBuffer = null;
+
+function loadMetronomeSounds() {
+  fetch('metronome_up.wav')
+    .then(response => response.arrayBuffer())
+    .then(arrayBuffer => audioCtx.decodeAudioData(arrayBuffer))
+    .then(audioBuffer => {
+      metronomeUpBuffer = audioBuffer;
+    });
+  fetch('metronome_down.wav')
+    .then(response => response.arrayBuffer())
+    .then(arrayBuffer => audioCtx.decodeAudioData(arrayBuffer))
+    .then(audioBuffer => {
+      metronomeDownBuffer = audioBuffer;
+    });
+}
+
+// 安排当 audioCtx.currentTime 到 time 时播放音频
+function playMetronome(firstBeat, time) {
+  const source = audioCtx.createBufferSource();
+  source.buffer = firstBeat ? metronomeUpBuffer : metronomeDownBuffer;
+  source.connect(audioCtx.destination);
+  source.start(time);
 }
 
 function toggleMetronome() {
   useMetronome.value = !useMetronome.value
+  if (useMetronome.value) {
+    updateNextBeatTime()
+    metronomeSchedule()
+  } else {
+    metronomeTimerID = setTimeout(metronomeSchedule, 25)
+  }
 }
 
+function metronomeSchedule() {
+  while (nextBeatTime < audioCtx.currentTime) {
+    if (useMetronome.value && isPlaying.value) {
+      playMetronome(nextBeatCount % tlMarkerBeat.value == 0, nextBeatTime)
+    }
+    nextBeatTime += tlMarkerIntervalStretched.value
+    nextBeatCount++
+  }
+  metronomeTimerID = setTimeout(metronomeSchedule, 25)
+}
+
+function updateNextBeatTime() {
+  clearTimeout(metronomeTimerID)
+  let timeA = audioCtx.currentTime
+  let timeP = currentTime.value
+  let timePStretched = timeP / currentSpeed.value
+  let interval = tlMarkerInterval.value
+  let intervalStretched = tlMarkerIntervalStretched.value
+  let offset = tlMarkerOffset.value
+  nextBeatCount = Math.floor(timeP / interval + offset)
+  nextBeatTime = timeA + (nextBeatCount + offset) * intervalStretched - timePStretched
+  if (useMetronome.value) {
+    metronomeTimerID = setTimeout(metronomeSchedule, 25)
+  }
+}
 
 function play() {
   if (videoInfo.value) {
